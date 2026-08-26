@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "FiveGuesses",
+    "slug": "fiveguesses",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0C0E12",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.fiveguesses"
+    },
+    "android": {
+      "package": "app.fiveguesses",
+      "adaptiveIcon": {
+        "backgroundColor": "#0C0E12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "FiveGuesses — daily song guessing",
+      "shortName": "FiveGuesses",
+      "themeColor": "#0C0E12",
+      "backgroundColor": "#0C0E12"
+    },
+    "plugins": [
+      "expo-audio"
+    ]
+  }
+}
