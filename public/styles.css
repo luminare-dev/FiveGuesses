@@ -1,0 +1,16 @@
+/* FiveGuesses static shell: font, reset and the root layout. */
+@font-face {
+  font-family: "Sora";
+  src: url("/fonts/Sora-Variable.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+html, body { height: 100%; margin: 0; }
+body {
+  overflow: hidden;
+  background: #0A1224;
+  font-family: "Sora", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+#root { display: flex; flex: 1; height: 100%; min-height: 100vh; min-height: 100dvh; }
