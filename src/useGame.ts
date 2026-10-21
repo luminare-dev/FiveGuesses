@@ -12,7 +12,7 @@ import { shareText as buildShareText } from './share';
 import { SONGS, SONG_COUNT } from './songs';
 import { applyResult, emptyStats } from './stats';
 import type { Stats } from './stats';
-import { loadRound, loadStats, migrateRound, pruneRounds, saveRound, saveStats } from './storage';
+import { loadRound, loadStats, migrateRound, pruneRounds, resetAllData, saveRound, saveStats } from './storage';
 import { useCountdown } from './useCountdown';
 import { useDailyPuzzle } from './useDailyPuzzle';
 
@@ -48,7 +48,26 @@ export type Game = {
   countdownText: string;
   // The share ladder of a finished daily round; null while playing and in free play.
   shareText: string | null;
+  // Removes everything stored, starts today's round afresh and forgets the free rounds played.
+  resetData: () => Promise<void>;
 };
+
+// The live region's text after a miss: the outcome and the seconds the next snippet plays.
+function missMessage(state: RoundState): string | null {
+  const last = state.entries[state.entries.length - 1];
+  if (last === undefined) return null;
+  const seconds = SNIPPET_SECONDS[unlockedIndex(state)];
+  switch (last.kind) {
+    case 'wrong':
+      return t('live.wrong', { seconds });
+    case 'partial':
+      return t('live.partial', { seconds });
+    case 'skip':
+      return t('live.skipped', { seconds });
+    case 'correct':
+      return null;
+  }
+}
 
 function reduce(state: RoundState, event: RoundEvent): RoundState {
   return roundReducer(state, event, SONGS[state.songIndex]);
@@ -131,8 +150,14 @@ export function useGame(options: GameOptions = {}): Game {
       if (daily) {
         void saveRound({ puzzle: next.puzzle as number, entries: next.entries, status: next.status });
       }
-      if (!isOver(next)) return;
+      if (!isOver(next)) {
+        const message = missMessage(next);
+        if (message !== null) announce(message);
+        return;
+      }
       stop();
+      const song = songLabel(SONGS[next.songIndex]);
+      announce(next.status === 'won' ? t('live.won', { song }) : t('live.lost', { song }));
       if (daily) {
         const updated = applyResult(
           statsRef.current ?? emptyStats(),
@@ -147,7 +172,7 @@ export function useGame(options: GameOptions = {}): Game {
         }
       }
     },
-    [stop]
+    [stop, announce]
   );
 
   const guess = useCallback((song: Song) => apply({ type: 'guess', song }), [apply]);
@@ -180,6 +205,20 @@ export function useGame(options: GameOptions = {}): Game {
       });
       announce(t('live.dailyRestored'));
     })();
+  }, [stop, announce]);
+
+  // The About sheet's reset: storage, stats, today's board and the free-play history go; the
+  // theme preference is reset by the screen through the theme provider.
+  const resetData = useCallback(async () => {
+    stop();
+    await resetAllData();
+    const fresh = emptyStats();
+    statsRef.current = fresh;
+    setStats(fresh);
+    const puzzle = puzzleRef.current;
+    dispatch({ type: 'startDaily', puzzle, songIndex: dailySongIndex(puzzle, SONG_COUNT), saved: null });
+    playedFree.current.clear();
+    announce(t('about.resetDone'));
   }, [stop, announce]);
 
   const over = isOver(round);
@@ -221,5 +260,6 @@ export function useGame(options: GameOptions = {}): Game {
     backToDaily,
     countdownText,
     shareText,
+    resetData,
   };
 }
