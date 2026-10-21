@@ -1,0 +1,54 @@
+# Reusable OpenSSF Scorecard analysis with SARIF upload to code scanning.
+#
+# With publish_results the Scorecard API enforces workflow rules (README of
+# ossf/scorecard-action v2.4.4, checked 2026-10-06): no top-level env or defaults, no
+# workflow-level write permissions, id-token: write only in the Scorecard job, no job env,
+# defaults, containers or services, an Ubuntu GitHub-hosted runner, and only these steps:
+# actions/checkout, actions/upload-artifact, github/codeql-action/upload-sarif,
+# ossf/scorecard-action, step-security/harden-runner. Keep this file inside those rules.
+name: reusable-scorecard
+
+on:
+  workflow_call:
+    inputs:
+      publish-results:
+        description: Publish to the Scorecard API (needed for the README badge). Ignored for private repositories.
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  analysis:
+    name: analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read           # read the repository
+      actions: read            # read workflow runs for the checks
+      security-events: write   # upload the SARIF file to code scanning
+      id-token: write          # sign the published results (publish_results)
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: ${{ inputs.publish-results }}
+
+      - name: Keep the SARIF file for 5 days
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: results.sarif

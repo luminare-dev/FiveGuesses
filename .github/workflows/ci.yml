@@ -1,0 +1,71 @@
+# Caller: lint, tests and the full-history secret scan on every pull request and push to main.
+# Required checks for the main ruleset: "ci / lint-test" and "secrets / gitleaks".
+# From luminare-dev/oss-template; the "web" job (type check, unit tests, web build, e2e) is this repository's own.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  # Superseded pull request runs are cancelled. Each commit on main gets its own group, so it
+  # always keeps its CI result (a shared group would still drop all but the newest pending run).
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci.yml
+    permissions:
+      contents: read
+
+  secrets:
+    uses: ./.github/workflows/reusable-gitleaks.yml
+    permissions:
+      contents: read
+
+  web:
+    name: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install the locked dependencies
+        run: npm ci
+
+      - name: Type check, unit tests and web build
+        run: npm run check
+
+      - name: Pinned Chromium for Playwright (version from the lockfile)
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Keep the Playwright traces of failed tests
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

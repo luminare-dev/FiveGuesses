@@ -1,0 +1,83 @@
+# Dependabot version updates (https://docs.github.com/en/code-security/dependabot).
+# Keeps the SHA pins of the workflow actions and their "# vX.Y.Z" comments current in the
+# workflows this repository owns, and the npm packages. A 7-day cooldown lets a bad release
+# surface before it lands here.
+# The files copied from luminare-dev/oss-template are pinned by hash in
+# tests/test_template_copies.py, so a Dependabot edit of them fails "ci / lint-test". They are left
+# out here: the four copied workflows and the adapted scorecard.yml (it uses no remote action)
+# through exclude-paths, and requirements-dev.txt (the only pip manifest) by having no pip entry.
+# The template receives the same updates; bring them over by copying the files again and moving
+# SOURCE_COMMIT and the hashes in that test. That also covers the gitleaks and actionlint downloads
+# (version + sha256 inputs in the copied reusable workflows), which Dependabot does not see. See
+# docs/adr/0012-logic-tests-in-jest-ui-tests-in-playwright.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    exclude-paths:   # template copies; see the header
+      - .github/workflows/pr-title.yml
+      - .github/workflows/scorecard.yml
+      - .github/workflows/reusable-ci.yml
+      - .github/workflows/reusable-gitleaks.yml
+      - .github/workflows/reusable-scorecard.yml
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    labels: [dependencies]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+    labels: [dependencies]
+    groups:
+      npm:
+        patterns: ["*"]
+    ignore:
+      # Expo SDK packages move together ("npx expo install --fix"); majors are bumped by hand.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-expo"
+        update-types: ["version-update:semver-major"]
+      # The SDK pins these to one minor version (node_modules/expo/bundledNativeModules.json);
+      # @types/react follows react.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-web"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Majors that need a change of their own, made by hand: Jest 30 (jest-expo 57 runs on
+      # Jest 29), TypeScript 7, and Node types past the Node 22 runtime (.nvmrc).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
