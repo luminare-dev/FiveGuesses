@@ -18,7 +18,7 @@ import { Header } from './Header';
 import { LiveRegion } from './LiveRegion';
 import { Reveal } from './Reveal';
 import { SnippetBar } from './SnippetBar';
-import { StatsCard } from './StatsCard';
+import { StatsSheet } from './StatsSheet';
 
 type SheetName = 'stats' | 'about' | null;
 
@@ -45,7 +45,7 @@ export function AppShell() {
   // Whichever About control was pressed last; it takes focus back when the sheet closes.
   const aboutOpener = useRef<View | null>(null);
 
-  const openStats = useCallback(() => setSheet((current) => (current === 'stats' ? null : 'stats')), []);
+  const openStats = useCallback(() => setSheet('stats'), []);
   const openAboutFromHeader = useCallback(() => {
     aboutOpener.current = headerAbout.current;
     setSheet('about');
@@ -95,7 +95,6 @@ export function AppShell() {
             <LiveRegion message={message} nonce={nonce} />
             <View role="main" aria-busy={!restored} style={styles.main}>
               {!restored && <Text style={styles.loading}>{t('app.loading')}</Text>}
-              {restored && sheet === 'stats' && stats !== null && <StatsCard stats={stats} />}
               {restored && (
                 <SnippetBar
                   unlockedIndex={game.unlockedIndex}
@@ -138,6 +137,14 @@ export function AppShell() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <StatsSheet
+        visible={sheet === 'stats'}
+        onClose={closeSheet}
+        openerRef={statsButton}
+        stats={stats}
+        todayPuzzle={game.puzzle}
+        countdownText={over && daily ? game.countdownText : null}
+      />
       <AboutSheet
         visible={sheet === 'about'}
         onClose={closeSheet}
