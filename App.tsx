@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { Board } from './src/components/Board';
 import { Button } from './src/components/Button';
 import { Countdown } from './src/components/Countdown';
-import { GuessInput } from './src/components/GuessInput';
+import { GuessCombobox } from './src/components/GuessCombobox';
 import { Reveal } from './src/components/Reveal';
 import { SnippetBar } from './src/components/SnippetBar';
 import { StatsCard } from './src/components/StatsCard';
@@ -31,7 +31,6 @@ function Game() {
   const [live, setLive] = useState('');
   const announce = useCallback((message: string) => setLive(message), []);
   const game = useGame({ announce });
-  const songList = useMemo(() => [...SONGS], []);
   const { round, over, stats } = game;
   const daily = round.mode === 'daily' && round.puzzle !== null;
 
@@ -81,11 +80,13 @@ function Game() {
                 onFreePlay={game.startFreePlay}
               />
             ) : (
-              <GuessInput
-                songs={songList}
+              <GuessCombobox
+                songs={SONGS}
                 nextSeconds={game.nextSeconds}
+                isLastGuess={game.isLastGuess}
                 onGuess={game.guess}
                 onSkip={game.skip}
+                announce={announce}
               />
             )}
 
