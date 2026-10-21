@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { GuessEntry, shareText, Song, songLabel } from '../game';
+import { GuessEntry, RoundStatus, shareText, Song, songLabel } from '../game';
 import { colors, radius } from '../theme';
 
 type Props = {
   song: Song;
-  won: boolean;
-  guesses: GuessEntry[];
+  status: RoundStatus;
+  entries: GuessEntry[];
   puzzle: number | null; // null = free play (no share)
   onFreePlay: () => void;
 };
 
-export function Reveal({ song, won, guesses, puzzle, onFreePlay }: Props) {
+export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
   const [copied, setCopied] = useState(false);
+  const won = status === 'won';
 
   const doShare = async () => {
     if (puzzle == null) return;
-    const text = shareText(puzzle, guesses, won);
+    // The board stores the winning row; the share builder adds it back on a win.
+    const text = shareText(puzzle, entries.filter((e) => e.kind !== 'correct'), won);
     if (Platform.OS === 'web') {
       try {
         await navigator.clipboard.writeText(text);

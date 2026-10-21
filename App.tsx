@@ -1,105 +1,83 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import songsData from './assets/songs.json';
 import { Board } from './src/components/Board';
 import { GuessInput } from './src/components/GuessInput';
 import { Reveal } from './src/components/Reveal';
 import { SnippetBar } from './src/components/SnippetBar';
 import { StatsCard } from './src/components/StatsCard';
-import {
-  dailySongIndex,
-  GuessEntry,
-  isCorrect,
-  MAX_GUESSES,
-  puzzleNumber,
-  randomSongIndex,
-  RoundStatus,
-  Song,
-  songLabel,
-} from './src/game';
+import { dailySongIndex, puzzleNumber, randomSongIndex, SNIPPET_SECONDS, songLabel } from './src/game';
 import { useSnippetPlayer } from './src/player';
-import { loadRound, loadStats, recordResult, saveRound, Stats } from './src/storage';
+import { isOver, roundReducer, RoundEvent, RoundState, unlockedIndex } from './src/round';
+import { SONGS, SONG_COUNT } from './src/songs';
+import { applyResult, emptyStats, Stats } from './src/stats';
+import { loadRound, loadStats, migrateRound, pruneRounds, saveRound, saveStats } from './src/storage';
 import { colors } from './src/theme';
-
-const SONGS: Song[] = (songsData as { songs: Song[] }).songs;
 
 export default function App() {
   const puzzle = useMemo(() => puzzleNumber(), []);
-  const dailyIdx = useMemo(() => dailySongIndex(puzzle, SONGS.length), [puzzle]);
+  const dailyIdx = useMemo(() => dailySongIndex(puzzle, SONG_COUNT), [puzzle]);
+  const songList = useMemo(() => [...SONGS], []);
 
-  const [mode, setMode] = useState<'daily' | 'free'>('daily');
-  const [freeIdx, setFreeIdx] = useState<number>(() => randomSongIndex(SONGS.length, dailyIdx));
-  const [guesses, setGuesses] = useState<GuessEntry[]>([]);
-  const [status, setStatus] = useState<RoundStatus>('playing');
+  const [round, setRound] = useState<RoundState>({
+    mode: 'daily',
+    puzzle,
+    songIndex: dailyIdx,
+    entries: [],
+    status: 'playing',
+  });
   const [stats, setStats] = useState<Stats | null>(null);
   const [restored, setRestored] = useState(false);
 
-  const answer = SONGS[mode === 'daily' ? dailyIdx : freeIdx];
-  const { play, stop, playingSeconds } = useSnippetPlayer(answer?.previewUrl ?? null);
+  const answer = SONGS[round.songIndex];
+  const { play, stop, playingSeconds } = useSnippetPlayer(answer.previewUrl);
 
   // Restore today's round + stats once.
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      await migrateRound(puzzle, songLabel(SONGS[dailyIdx]));
       const [saved, s] = await Promise.all([loadRound(puzzle), loadStats()]);
-      if (saved) {
-        setGuesses(saved.guesses);
-        setStatus(saved.status);
-      }
+      await pruneRounds(puzzle);
+      if (cancelled) return;
+      const event: RoundEvent = {
+        type: 'startDaily',
+        puzzle,
+        songIndex: dailyIdx,
+        saved: saved ? { entries: saved.entries, status: saved.status } : null,
+      };
+      setRound((r) => roundReducer(r, event, SONGS[r.songIndex]));
       setStats(s);
       setRestored(true);
     })();
-  }, [puzzle]);
+    return () => {
+      cancelled = true;
+    };
+  }, [puzzle, dailyIdx]);
 
-  const persistDaily = (g: GuessEntry[], st: RoundStatus) => {
-    if (mode === 'daily') saveRound({ puzzle, guesses: g, status: st });
-  };
-
-  const finish = async (won: boolean, g: GuessEntry[]) => {
+  const apply = (event: RoundEvent) => {
+    const next = roundReducer(round, event, answer);
+    if (next === round) return;
+    setRound(next);
+    const daily = next.mode === 'daily' && next.puzzle != null;
+    if (daily) saveRound({ puzzle: next.puzzle as number, entries: next.entries, status: next.status });
+    if (!isOver(next)) return;
     stop();
-    if (mode === 'daily') {
-      const used = won ? g.length + 1 : g.length;
-      const s = await recordResult(puzzle, won, used);
-      setStats(s);
+    if (daily) {
+      const updated = applyResult(stats ?? emptyStats(), next.puzzle as number, next.status === 'won', next.entries.length);
+      setStats(updated);
+      saveStats(updated);
     }
-  };
-
-  const onGuess = (song: Song) => {
-    if (status !== 'playing') return;
-    if (isCorrect(song, answer)) {
-      setStatus('won');
-      persistDaily(guesses, 'won');
-      finish(true, guesses);
-      return;
-    }
-    const g: GuessEntry[] = [...guesses, { kind: 'wrong', text: songLabel(song) }];
-    setGuesses(g);
-    const st: RoundStatus = g.length >= MAX_GUESSES ? 'lost' : 'playing';
-    setStatus(st);
-    persistDaily(g, st);
-    if (st === 'lost') finish(false, g);
-  };
-
-  const onSkip = () => {
-    if (status !== 'playing') return;
-    const g: GuessEntry[] = [...guesses, { kind: 'skip' }];
-    setGuesses(g);
-    const st: RoundStatus = g.length >= MAX_GUESSES ? 'lost' : 'playing';
-    setStatus(st);
-    persistDaily(g, st);
-    if (st === 'lost') finish(false, g);
   };
 
   const startFreePlay = () => {
     stop();
-    setMode('free');
-    setFreeIdx(randomSongIndex(SONGS.length, mode === 'daily' ? dailyIdx : freeIdx));
-    setGuesses([]);
-    setStatus('playing');
+    const songIndex = randomSongIndex(SONG_COUNT, round.songIndex);
+    setRound((r) => roundReducer(r, { type: 'startFree', songIndex }, answer));
   };
 
-  const over = status !== 'playing';
-  const unlockedIndex = Math.min(guesses.length, MAX_GUESSES - 1);
+  const over = isOver(round);
+  const unlocked = unlockedIndex(round);
 
   if (!restored) {
     return <View style={styles.root} />;
@@ -119,32 +97,38 @@ export default function App() {
                 ✋ Five<Text style={{ color: colors.accent }}>Guesses</Text>
               </Text>
               <Text style={styles.subtitle}>
-                {mode === 'daily' ? `Daily #${puzzle} · Name the song` : 'Free play · Name the song'}
+                {round.mode === 'daily'
+                  ? `Daily #${round.puzzle} · Name the song`
+                  : 'Free play · Name the song'}
               </Text>
             </View>
 
-            {over && stats && mode === 'daily' && <StatsCard stats={stats} />}
+            {over && stats && round.mode === 'daily' && <StatsCard stats={stats} />}
 
             <SnippetBar
-              unlockedIndex={unlockedIndex}
+              unlockedIndex={unlocked}
               playingSeconds={playingSeconds}
-              onPlay={() => play([1, 2, 4, 8, 16][unlockedIndex])}
+              onPlay={() => play(SNIPPET_SECONDS[unlocked])}
               onStop={stop}
               disabled={over}
             />
 
-            <Board guesses={guesses} winningLabel={status === 'won' ? songLabel(answer) : null} />
+            <Board entries={round.entries} activeIndex={over ? null : round.entries.length} />
 
             {over ? (
               <Reveal
                 song={answer}
-                won={status === 'won'}
-                guesses={guesses}
-                puzzle={mode === 'daily' ? puzzle : null}
+                status={round.status}
+                entries={round.entries}
+                puzzle={round.puzzle}
                 onFreePlay={startFreePlay}
               />
             ) : (
-              <GuessInput songs={SONGS} onGuess={onGuess} onSkip={onSkip} />
+              <GuessInput
+                songs={songList}
+                onGuess={(song) => apply({ type: 'guess', song })}
+                onSkip={() => apply({ type: 'skip' })}
+              />
             )}
 
             <Text style={styles.footer}>Previews courtesy of Apple Music · fiveguesses.app</Text>
