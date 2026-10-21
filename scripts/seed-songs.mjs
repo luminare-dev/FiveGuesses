@@ -2,7 +2,15 @@
 // Respects the documented ~20 req/min limit (3.2s spacing, backoff on 403/429).
 // Previews are promotional Apple content: the app must show the Apple Music link-out
 // and "courtesy of Apple Music" attribution wherever previews play.
-import { writeFileSync, mkdirSync } from 'node:fs';
+//
+// Usage:
+//   node scripts/seed-songs.mjs
+//     Resolves every seed and rewrites assets/songs.json.
+//   node scripts/seed-songs.mjs --only "Artist - Title" [--only "Artist - Title" ...]
+//     Resolves only the named seeds and merges the results into the existing file at their
+//     positions; the other entries are kept as they are. A named seed with no acceptable match
+//     is removed from the file, so a wrong recording never survives a re-run.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -121,8 +129,34 @@ const norm = (s) =>
     .replace(/[^a-z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+const tokens = (s) => s.split(' ').filter((t) => t && t !== 'the');
+const seedKey = (artist, title) => `${artist} - ${title}`;
 
-const BAD = /karaoke|tribute|cover version|as made famous|originally performed|in the style of|8-bit|lullaby|instrumental/i;
+// Results whose name or album marks them as something other than the original recording.
+const BAD =
+  /karaoke|tribute|cover version|as made famous|originally performed|in the style of|8-bit|lullaby|instrumental|\bacoustic\b|\blive at\b|\bdemo\b/i;
+// Words that mark an alternate version of a track. They cost points unless the seed title
+// itself carries them (a remix released as the hit stays a valid match).
+const VARIANT_WORDS = new Set(['acoustic', 'demo', 'version', 'edit', 'radio', 'live', 'remix', 'mix', 'instrumental']);
+// Bracketed qualifiers that do not mark an alternate version: credits and soundtrack notes.
+const CREDIT = /^(feat|featuring|with|from)\b/;
+
+// True when the result's artist is the seed's artist: the same name, or every word of the seed's
+// name is in the result's name (co-artists and "feat." credits are allowed, other artists are not).
+function sameArtist(ra, na) {
+  if (ra === na) return true;
+  const have = new Set(tokens(ra));
+  return tokens(na).every((t) => have.has(t));
+}
+
+// True when the track name marks an alternate version: a variant word, or a bracketed
+// qualifier that is neither part of the seed title nor a credit.
+function alternateVersion(trackName, nt) {
+  const seedWords = new Set(tokens(nt));
+  if (tokens(norm(trackName)).some((w) => VARIANT_WORDS.has(w) && !seedWords.has(w))) return true;
+  const qualifiers = [...trackName.matchAll(/[([]([^)\]]*)[)\]]/g)].map((m) => norm(m[1]));
+  return qualifiers.some((q) => q && !nt.includes(q) && !CREDIT.test(q));
+}
 
 function pickMatch(results, artist, title) {
   const na = norm(artist);
@@ -130,6 +164,7 @@ function pickMatch(results, artist, title) {
   const scored = results
     .filter((r) => r.previewUrl && r.trackName && r.artistName)
     .filter((r) => !BAD.test(`${r.artistName} ${r.trackName} ${r.collectionName || ''}`))
+    .filter((r) => sameArtist(norm(r.artistName), na))
     .map((r) => {
       const rt = norm(r.trackName);
       const ra = norm(r.artistName);
@@ -137,17 +172,19 @@ function pickMatch(results, artist, title) {
       if (rt === nt) score += 4;
       else if (rt.startsWith(nt) || nt.startsWith(rt)) score += 2;
       else if (rt.includes(nt) || nt.includes(rt)) score += 1;
-      if (ra === na) score += 3;
-      else if (ra.includes(na.split(' ')[0])) score += 1;
-      if (/live/i.test(r.trackName) && !/live/i.test(title)) score -= 3;
-      if (/remix/i.test(r.trackName) && !/remix/i.test(title)) score -= 2;
+      if (score === 0) return null; // another song by the same artist is never a match
+      score += ra === na ? 3 : 1;
+      if (alternateVersion(r.trackName, nt)) score -= 3;
       return { r, score };
     })
+    .filter(Boolean)
     .sort((a, b) => b.score - a.score);
   return scored.length && scored[0].score >= 3 ? scored[0].r : null;
 }
 
+// Returns { match } or { match: null, reason }; "reason" tells a miss from a search that never answered.
 async function lookup(artist, title) {
+  let answered = false;
   for (const country of COUNTRIES) {
     const term = encodeURIComponent(`${artist} ${title}`);
     const url = `https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=8&country=${country}`;
@@ -160,9 +197,10 @@ async function lookup(artist, title) {
           continue;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        answered = true;
         const data = await res.json();
         const match = pickMatch(data.results || [], artist, title);
-        if (match) return match;
+        if (match) return { match };
         break; // no match in this country's catalogue — try the next one
       } catch (e) {
         console.log(`  error (${e.message}), retry ${attempt + 1}/3`);
@@ -171,16 +209,57 @@ async function lookup(artist, title) {
     }
     await sleep(DELAY_MS);
   }
-  return null;
+  return { match: null, reason: answered ? 'no acceptable match' : 'no answer from the search API' };
+}
+
+function parseArgs(argv) {
+  const only = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--only' && i + 1 < argv.length) only.push(argv[++i]);
+    else if (argv[i].startsWith('--only=')) only.push(argv[i].slice('--only='.length));
+    else {
+      console.error(`Unknown argument: ${argv[i]} (expected --only "Artist - Title")`);
+      process.exit(2);
+    }
+  }
+  return { only };
+}
+
+const { only } = parseArgs(process.argv.slice(2));
+const wanted = new Set();
+for (const name of only) {
+  const index = SEED.findIndex(([artist, title]) => norm(seedKey(artist, title)) === norm(name));
+  if (index < 0) {
+    console.error(`No seed named "${name}" (expected "Artist - Title" as listed in SEED)`);
+    process.exit(2);
+  }
+  wanted.add(index);
+}
+const partial = wanted.size > 0;
+
+// In partial mode the entries of the seeds that are not re-resolved come from the existing file.
+const existing = new Map();
+if (partial) {
+  if (!existsSync(OUT)) {
+    console.error(`--only needs an existing ${OUT}`);
+    process.exit(2);
+  }
+  for (const s of JSON.parse(readFileSync(OUT, 'utf8')).songs) existing.set(seedKey(s.artist, s.title), s);
 }
 
 const songs = [];
 const misses = [];
+const total = partial ? wanted.size : SEED.length;
 let i = 0;
-for (const [artist, title, year] of SEED) {
+for (const [index, [artist, title, year]] of SEED.entries()) {
+  const key = seedKey(artist, title);
+  if (partial && !wanted.has(index)) {
+    if (existing.has(key)) songs.push(existing.get(key));
+    continue;
+  }
   i++;
-  process.stdout.write(`[${i}/${SEED.length}] ${artist} - ${title} ... `);
-  const m = await lookup(artist, title);
+  process.stdout.write(`[${i}/${total}] ${key} ... `);
+  const { match: m, reason } = await lookup(artist, title);
   if (m) {
     songs.push({
       id: m.trackId,
@@ -195,8 +274,8 @@ for (const [artist, title, year] of SEED) {
     });
     console.log('OK');
   } else {
-    misses.push(`${artist} - ${title}`);
-    console.log('MISS');
+    misses.push(`${key} (${reason})`);
+    console.log(`MISS (${reason})`);
   }
   await sleep(DELAY_MS);
 }

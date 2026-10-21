@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T01:15:21.660Z",
+  "generatedAt": "2026-10-21T16:35:07.941Z",
   "songs": [
     {
       "id": 1440783625,
@@ -90,17 +90,6 @@
       "appleMusicUrl": "https://music.apple.com/de/album/losing-my-religion/1422693791?i=1422693816&uo=4"
     },
     {
-      "id": 1679849823,
-      "artist": "Radiohead",
-      "title": "Creep",
-      "year": 1992,
-      "matchedTrack": "Creep (Acoustic)",
-      "matchedArtist": "Radiohead",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/8d/e0/bb/8de0bb10-0593-83cc-4d2c-4e9f6ea9b575/mzaf_16440589638018943894.plus.aac.p.m4a",
-      "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/28/7a/7c/287a7ca9-ed95-1a21-e3bb-4559a1a0ac0e/191404134351.png/512x512bb.jpg",
-      "appleMusicUrl": "https://music.apple.com/de/album/creep-acoustic/1679849414?i=1679849823&uo=4"
-    },
-    {
       "id": 1206676136,
       "artist": "Coolio",
       "title": "Gangsta's Paradise",
@@ -143,17 +132,6 @@
       "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/c0/b6/4f/c0b64f0b-b65e-fb68-b15f-05ac64d62a35/mzaf_11998975033631222555.plus.aac.p.m4a",
       "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music/b7/89/75/mzi.avnvijfg.jpg/512x512bb.jpg",
       "appleMusicUrl": "https://music.apple.com/de/album/freestyler/260654973?i=260655284&uo=4"
-    },
-    {
-      "id": 257425340,
-      "artist": "Eiffel 65",
-      "title": "Blue (Da Ba Dee)",
-      "year": 1998,
-      "matchedTrack": "Blue (Da Ba Dee) [Gabry Ponte Ice Pop Radio]",
-      "matchedArtist": "Eiffel 65",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/1e/ac/24/1eac24fa-464b-7269-b896-c5c249b0bf40/mzaf_9694238856813365695.plus.aac.p.m4a",
-      "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a9/ec/b3/a9ecb373-0ea0-4117-9a68-03f513bae597/mzi.iwxdpjun.jpg/512x512bb.jpg",
-      "appleMusicUrl": "https://music.apple.com/de/album/blue-da-ba-dee-gabry-ponte-ice-pop-radio/257424513?i=257425340&uo=4"
     },
     {
       "id": 73273491,
@@ -429,17 +407,6 @@
       "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/8f/39/df/8f39df6b-9b97-1313-b26d-368d9cc0d20f/mzaf_16643660259914950728.plus.aac.p.m4a",
       "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/74/25/4c/74254c8b-e03d-44e8-304d-4cde508b8cfb/dj.swemfdrr.jpg/512x512bb.jpg",
       "appleMusicUrl": "https://music.apple.com/de/album/sex-on-fire/290302885?i=290303003&uo=4"
-    },
-    {
-      "id": 1654696615,
-      "artist": "Green Day",
-      "title": "Boulevard of Broken Dreams",
-      "year": 2004,
-      "matchedTrack": "Boulevard of Broken Dreams",
-      "matchedArtist": "Jiyagi",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview112/v4/17/48/da/1748dac1-14e9-870b-54fc-85778a4d9420/mzaf_10368611300062944605.plus.aac.p.m4a",
-      "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/5d/b5/67/5db56765-bd3a-c702-d04f-4948d345bb06/cover_4062851501309.jpg/512x512bb.jpg",
-      "appleMusicUrl": "https://music.apple.com/de/album/boulevard-of-broken-dreams/1654696614?i=1654696615&uo=4"
     },
     {
       "id": 315844084,
