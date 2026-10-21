@@ -8,7 +8,8 @@ import type { Song } from './game';
 import { t } from './i18n';
 import { isOver, roundReducer, unlockedIndex } from './round';
 import type { RoundEvent, RoundState } from './round';
-import { shareText as buildShareText } from './share';
+import { shareOutcomeMessage, shareResult, shareText as buildShareText } from './share';
+import type { ShareOutcome } from './share';
 import { SONGS, SONG_COUNT } from './songs';
 import { applyResult, emptyStats } from './stats';
 import type { Stats } from './stats';
@@ -48,6 +49,10 @@ export type Game = {
   countdownText: string;
   // The share ladder of a finished daily round; null while playing and in free play.
   shareText: string | null;
+  // How the last share attempt of this round ended; null before the first attempt.
+  shareOutcome: ShareOutcome | null;
+  // Hands the ladder to the share sheet or the clipboard and announces the outcome.
+  share: () => void;
   // Removes everything stored, starts today's round afresh and forgets the free rounds played.
   resetData: () => Promise<void>;
 };
@@ -98,6 +103,7 @@ export function useGame(options: GameOptions = {}): Game {
   const statsRef = useRef(stats);
   statsRef.current = stats;
   const [restored, setRestored] = useState(false);
+  const [shareOutcome, setShareOutcome] = useState<ShareOutcome | null>(null);
   // Free rounds served in this session; forgotten on reload.
   const playedFree = useRef(new Set<number>());
 
@@ -112,6 +118,7 @@ export function useGame(options: GameOptions = {}): Game {
   useEffect(() => {
     let cancelled = false;
     stop();
+    setShareOutcome(null);
     (async () => {
       await migrateRound(puzzle, songLabel(SONGS[dailyIndex]));
       const saved = await loadRound(puzzle);
@@ -183,6 +190,7 @@ export function useGame(options: GameOptions = {}): Game {
     const excluded = new Set<number>([dailySongIndex(puzzleRef.current, SONG_COUNT), ...playedFree.current]);
     const songIndex = pickFreePlayIndex(SONG_COUNT, excluded);
     playedFree.current.add(songIndex);
+    setShareOutcome(null);
     dispatch({ type: 'startFree', songIndex });
     announce(t('live.freeStarted'));
   }, [stop, announce]);
@@ -197,6 +205,7 @@ export function useGame(options: GameOptions = {}): Game {
         target = puzzleRef.current;
         saved = await loadRound(target);
       }
+      setShareOutcome(null);
       dispatch({
         type: 'startDaily',
         puzzle: target,
@@ -216,6 +225,7 @@ export function useGame(options: GameOptions = {}): Game {
     statsRef.current = fresh;
     setStats(fresh);
     const puzzle = puzzleRef.current;
+    setShareOutcome(null);
     dispatch({ type: 'startDaily', puzzle, songIndex: dailySongIndex(puzzle, SONG_COUNT), saved: null });
     playedFree.current.clear();
     announce(t('about.resetDone'));
@@ -239,6 +249,17 @@ export function useGame(options: GameOptions = {}): Game {
     [over, round]
   );
 
+  // Called from the share button's press handler, so the share sheet still sees the gesture.
+  // A dismissed sheet leaves the outcome and the live region as they were.
+  const share = useCallback(() => {
+    if (shareText === null) return;
+    void shareResult(shareText).then((outcome) => {
+      if (outcome === 'cancelled') return;
+      setShareOutcome(outcome);
+      announce(shareOutcomeMessage(outcome));
+    });
+  }, [shareText, announce]);
+
   return {
     round,
     puzzle,
@@ -260,6 +281,8 @@ export function useGame(options: GameOptions = {}): Game {
     backToDaily,
     countdownText,
     shareText,
+    shareOutcome,
+    share,
     resetData,
   };
 }

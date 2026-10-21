@@ -1,5 +1,6 @@
+import { Share } from 'react-native';
 import { GuessEntry } from '../game';
-import { shareResult, shareText } from '../share';
+import { shareOutcomeMessage, shareResult, shareText } from '../share';
 
 const wrong = (text: string): GuessEntry => ({ kind: 'wrong', text });
 const partial = (text: string): GuessEntry => ({ kind: 'partial', text });
@@ -59,7 +60,61 @@ describe('the share host', () => {
 });
 
 describe('shareResult', () => {
+  const LADDER = 'FiveGuesses #58 1/5\n1s ✓\nfiveguesses.app';
+  const writeText = jest.fn((_text: string) => Promise.resolve());
+  let clipboardBefore: PropertyDescriptor | undefined;
+
+  function withClipboard() {
+    clipboardBefore = Object.getOwnPropertyDescriptor(globalThis.navigator, 'clipboard');
+    Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true });
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    writeText.mockClear();
+    if (clipboardBefore !== undefined) {
+      Object.defineProperty(globalThis.navigator, 'clipboard', clipboardBefore);
+      clipboardBefore = undefined;
+    } else if (globalThis.navigator !== undefined) {
+      delete (globalThis.navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
   it('reports a failure where neither a share sheet nor a clipboard exists', async () => {
-    await expect(shareResult('FiveGuesses #58 1/5\n1s ✓\nfiveguesses.app')).resolves.toBe('failed');
+    await expect(shareResult(LADDER)).resolves.toBe('failed');
+  });
+  it('reports a shared result when the share sheet resolves', async () => {
+    jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction });
+    withClipboard();
+    await expect(shareResult(LADDER)).resolves.toBe('shared');
+    expect(Share.share).toHaveBeenCalledWith({ message: LADDER });
+    expect(writeText).not.toHaveBeenCalled();
+  });
+  it('copies to the clipboard when there is no share sheet', async () => {
+    jest.spyOn(Share, 'share').mockRejectedValue(new Error('Share is not supported in this browser'));
+    withClipboard();
+    await expect(shareResult(LADDER)).resolves.toBe('copied');
+    expect(writeText).toHaveBeenCalledWith(LADDER);
+  });
+  it('treats a dismissed browser share sheet as cancelled and copies nothing', async () => {
+    const abort = Object.assign(new Error('Share canceled'), { name: 'AbortError' });
+    jest.spyOn(Share, 'share').mockRejectedValue(abort);
+    withClipboard();
+    await expect(shareResult(LADDER)).resolves.toBe('cancelled');
+    expect(writeText).not.toHaveBeenCalled();
+  });
+  it('treats the dismissed action of the native share sheet as cancelled', async () => {
+    jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.dismissedAction });
+    withClipboard();
+    await expect(shareResult(LADDER)).resolves.toBe('cancelled');
+    expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('shareOutcomeMessage', () => {
+  it('names each outcome of a share attempt', () => {
+    expect(shareOutcomeMessage('shared')).toBe('Shared');
+    expect(shareOutcomeMessage('copied')).toBe('Copied to clipboard');
+    expect(shareOutcomeMessage('failed')).toBe('Could not share. Copy the text below instead.');
   });
 });

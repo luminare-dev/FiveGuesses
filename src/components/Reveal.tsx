@@ -1,72 +1,120 @@
-import React, { useMemo, useState } from 'react';
-import { Image, Linking, Platform, Share, StyleSheet, Text, View } from 'react-native';
-import { SITE_HOST } from '../config';
-import { GuessEntry, RoundStatus, Song, songLabel } from '../game';
+import React, { useMemo } from 'react';
+import type { Ref } from 'react';
+import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RoundStatus, Song, songLabel } from '../game';
 import { t } from '../i18n';
-import { shareText } from '../share';
+import type { RoundMode } from '../round';
+import { shareOutcomeMessage } from '../share';
+import type { ShareOutcome } from '../share';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
 import { tabularNums, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 import { Button } from './Button';
+import { Countdown } from './Countdown';
 
 type Props = {
   song: Song;
   status: RoundStatus;
-  entries: GuessEntry[];
-  puzzle: number | null; // null = free play (no share)
+  mode: RoundMode;
+  // The ladder of a finished daily round; null in free play, where nothing is shared.
+  shareText: string | null;
+  shareOutcome: ShareOutcome | null;
+  onShare: () => void;
   onFreePlay: () => void;
+  onBackToDaily: () => void;
+  // The result heading; the screen moves focus here when a round ends.
+  headingRef?: Ref<Text>;
 };
 
-export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
+const LISTEN_HINT_ID = 'reveal-listen-hint';
+
+// The card shown once the round is over: the result as a heading, the artwork, the song, the
+// link to the full track, the share button with its outcome, the way into free play or back to
+// the daily round, the countdown and the previews credit.
+export function Reveal({
+  song,
+  status,
+  mode,
+  shareText,
+  shareOutcome,
+  onShare,
+  onFreePlay,
+  onBackToDaily,
+  headingRef,
+}: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const [copied, setCopied] = useState(false);
   const won = status === 'won';
+  const label = songLabel(song);
   const appleMusicUrl = song.appleMusicUrl;
-
-  const doShare = async () => {
-    if (puzzle == null) return;
-    const message = shareText({ puzzle, entries, status, host: SITE_HOST });
-    if (Platform.OS === 'web') {
-      try {
-        await navigator.clipboard.writeText(message);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {}
-    } else {
-      try {
-        await Share.share({ message });
-      } catch {}
-    }
-  };
+  const daily = mode === 'daily';
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.headline, won ? styles.headlineWon : styles.headlineLost]}>
+      <Text
+        ref={headingRef}
+        role="heading"
+        aria-level={2}
+        tabIndex={-1}
+        style={[styles.headline, won ? styles.headlineWon : styles.headlineLost]}
+      >
         {won ? t('reveal.won') : t('reveal.lost')}
       </Text>
-      {!!song.artworkUrl && <Image source={{ uri: song.artworkUrl }} style={styles.art} />}
-      <Text style={styles.title}>{songLabel(song)}</Text>
+      {/* One image node: the wrapper carries the role and the name, the picture itself is
+          hidden, since react-native-web adds an <img> of its own inside every Image. */}
+      {song.artworkUrl !== '' && (
+        <View role="img" aria-label={t('reveal.artwork', { song: label })} style={styles.art}>
+          <Image source={{ uri: song.artworkUrl }} aria-hidden style={styles.artImage} />
+        </View>
+      )}
+      <Text style={styles.title}>{label}</Text>
       <Text style={styles.year}>{song.year}</Text>
 
-      {appleMusicUrl !== null && (
-        <Button
-          variant="secondary"
-          label={t('reveal.listen')}
-          onPress={() => {
-            void Linking.openURL(appleMusicUrl);
-          }}
-          style={styles.listen}
-        />
-      )}
+      {appleMusicUrl !== null &&
+        (Platform.OS === 'web' ? (
+          <Text
+            role="link"
+            href={appleMusicUrl}
+            hrefAttrs={{ target: '_blank', rel: 'noopener noreferrer' }}
+            aria-describedby={LISTEN_HINT_ID}
+            style={styles.listen}
+          >
+            {t('reveal.listen')}
+          </Text>
+        ) : (
+          <Pressable
+            role="link"
+            aria-describedby={LISTEN_HINT_ID}
+            onPress={() => {
+              void Linking.openURL(appleMusicUrl);
+            }}
+            style={styles.listen}
+          >
+            <Text style={styles.listenText}>{t('reveal.listen')}</Text>
+          </Pressable>
+        ))}
+      <Text nativeID={LISTEN_HINT_ID} style={styles.hidden}>
+        {t('reveal.listenHint')}
+      </Text>
 
       <View style={styles.actions}>
-        {puzzle != null && <Button label={t('reveal.share')} onPress={() => void doShare()} style={styles.half} />}
+        {daily && shareText !== null && <Button label={t('reveal.share')} onPress={onShare} style={styles.half} />}
         <Button variant="secondary" label={t('reveal.freePlay')} onPress={onFreePlay} style={styles.half} />
+        {!daily && (
+          <Button variant="secondary" label={t('reveal.backToDaily')} onPress={onBackToDaily} style={styles.half} />
+        )}
       </View>
-      {copied && <Text style={styles.status}>{t('reveal.copied')}</Text>}
+      {daily && shareOutcome !== null && <Text style={styles.outcome}>{shareOutcomeMessage(shareOutcome)}</Text>}
+      {daily && shareOutcome === 'failed' && shareText !== null && (
+        <View role="group" aria-label={t('reveal.shareTextLabel')} style={styles.shareBlock}>
+          <Text selectable style={styles.shareBlockText}>
+            {shareText}
+          </Text>
+        </View>
+      )}
 
+      {daily && <Countdown style={styles.countdown} />}
       <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
     </View>
   );
@@ -87,13 +135,42 @@ function makeStyles(theme: Theme) {
     headline: { ...text(20, '700') },
     headlineWon: { color: theme.correct },
     headlineLost: { color: theme.textSecondary },
-    art: { width: 160, height: 160, borderRadius: radius.md, marginTop: 6 },
+    art: { width: 160, height: 160, borderRadius: radius.md, marginTop: 6, overflow: 'hidden' },
+    artImage: { width: '100%', height: '100%' },
     title: { ...text(17, '700'), color: theme.text, textAlign: 'center', marginTop: 6 },
     year: { ...text(13, '500'), ...tabularNums, color: theme.textSecondary },
-    listen: { marginTop: 8 },
+    listen: {
+      ...text(16, '600'),
+      color: theme.text,
+      display: 'flex',
+      alignSelf: 'stretch',
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      textAlign: 'center',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.borderStrong,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      marginTop: 8,
+    },
+    listenText: { ...text(16, '600'), color: theme.text },
+    // Read through aria-describedby, not shown.
+    hidden: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
     actions: { flexDirection: 'row', gap: 10, marginTop: 12, alignSelf: 'stretch' },
     half: { flex: 1 },
-    status: { ...text(13, '500'), color: theme.textSecondary },
-    attribution: { ...text(12, '500'), color: theme.textMuted, marginTop: 10 },
+    outcome: { ...text(13, '500'), color: theme.textSecondary, textAlign: 'center' },
+    shareBlock: {
+      alignSelf: 'stretch',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: theme.borderStrong,
+      backgroundColor: theme.background,
+      padding: 12,
+    },
+    shareBlockText: { ...text(15), ...tabularNums, color: theme.text },
+    countdown: { marginTop: 8 },
+    attribution: { ...text(12, '500'), color: theme.textMuted, marginTop: 6 },
   });
 }

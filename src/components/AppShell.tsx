@@ -10,8 +10,6 @@ import { useTheme } from '../theme/useTheme';
 import { useGame } from '../useGame';
 import { AboutSheet } from './AboutSheet';
 import { Board } from './Board';
-import { Button } from './Button';
-import { Countdown } from './Countdown';
 import { Footer } from './Footer';
 import { GuessCombobox } from './GuessCombobox';
 import { Header } from './Header';
@@ -123,14 +121,15 @@ export function AppShell() {
                 <Reveal
                   song={game.answer}
                   status={round.status}
-                  entries={round.entries}
-                  puzzle={round.puzzle}
+                  mode={round.mode}
+                  countdownText={game.countdownText}
+                  shareText={game.shareText}
+                  shareOutcome={game.shareOutcome}
+                  onShare={game.share}
                   onFreePlay={game.startFreePlay}
+                  onBackToDaily={game.backToDaily}
+                  headingRef={revealHeading}
                 />
-              )}
-              {restored && over && daily && <Countdown time={game.countdownText} />}
-              {restored && over && !daily && (
-                <Button variant="secondary" label={t('reveal.backToDaily')} onPress={game.backToDaily} style={styles.stretch} />
               )}
             </View>
             <Footer onOpenAbout={openAboutFromFooter} aboutButtonRef={footerAbout} />
@@ -165,6 +164,5 @@ function makeStyles(theme: Theme) {
     column: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: 16 },
     main: { alignSelf: 'stretch', gap: 16 },
     loading: { ...text(16), color: theme.textSecondary, textAlign: 'center', paddingVertical: 24 },
-    stretch: { alignSelf: 'stretch' },
   });
 }
