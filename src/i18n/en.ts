@@ -27,7 +27,10 @@ export const en = {
   'reveal.share': 'Share result',
   'reveal.copied': 'Copied to clipboard',
   'reveal.freePlay': 'Play a free round',
+  'reveal.backToDaily': "Back to today's round",
   'reveal.previewsCredit': 'Previews courtesy of Apple Music',
+  'countdown.label': 'Next song in {time}',
+  'countdown.ready': 'A new daily song is ready',
   'stats.played': 'Played',
   'stats.winRate': 'Win rate',
   'stats.winRateValue': '{percent}%',
@@ -37,4 +40,6 @@ export const en = {
   'footer.previews': 'Previews courtesy of Apple Music',
   'footer.copyright': '© 2026 {studio}',
   'footer.projectPage': 'Luminare Development, project page',
+  'live.freeStarted': 'Free round started. Name the song.',
+  'live.dailyRestored': "Back to today's round.",
 } as const satisfies Record<string, string>;
