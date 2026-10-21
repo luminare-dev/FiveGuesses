@@ -1,1 +1,82 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Privacy and legal</title></head><body><h1>Privacy and legal</h1><p>This page is written in work package B5.</p></body></html>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Privacy and legal – FiveGuesses</title>
+    <meta name="description" content="Who runs fiveguesses.app, what the site does with your data, which requests go to other hosts, and your rights.">
+    <meta name="color-scheme" content="dark light">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3F6FB">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A1224">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/legal/legal.css">
+  </head>
+  <body>
+    <main>
+      <h1>Privacy and legal</h1>
+      <p>Last updated: 21 October 2026</p>
+      <p><a href="/">Back to the game</a></p>
+
+      <h2>Who runs this site</h2>
+      <p>
+        fiveguesses.app is run by Paul Pasaurek, publishing as Luminare Development.
+        Contact: <a href="mailto:oss@luminare.tech">oss@luminare.tech</a>.
+      </p>
+      <p>
+        The media-law disclosure for this site is at <a href="https://luminare.tech/imprint/">luminare.tech/imprint/</a>.
+        The studio's privacy notice is at <a href="https://luminare.tech/privacy/">luminare.tech/privacy/</a>.
+      </p>
+
+      <h2>What this site does with your data</h2>
+      <p>
+        This site has no accounts and no uploads. It sets no cookies, runs no analytics and does no tracking.
+        It loads no fonts and no scripts from other hosts; the font is served from this site.
+      </p>
+
+      <h2>Data stored in your browser</h2>
+      <p>The game keeps its state in your browser's local storage under these keys:</p>
+      <ul>
+        <li><code>fg:stats:v1</code>: your statistics and streak.</li>
+        <li><code>fg:round:v2:&lt;day&gt;</code>: today's round, under the number of the day's puzzle.</li>
+        <li><code>fg:theme:v1</code>: your theme choice.</li>
+      </ul>
+      <p>
+        This data never leaves your device. To delete it, open About in the game and choose Reset my data,
+        or clear this site's data in your browser's settings.
+      </p>
+
+      <h2>Server logs</h2>
+      <p>
+        This site runs on a server rented from Hetzner Online GmbH (Germany) and administered by the operator.
+        The web server writes access logs that hold your IP address, the time, the requested URL, the response status and your browser's user agent.
+        IP addresses are shortened after at most 7 days.
+        Log files are deleted after at most 5 weeks.
+        The legal basis is Article 6(1)(f) GDPR: the secure operation of the site.
+      </p>
+
+      <h2>Requests to Apple</h2>
+      <p>
+        When you press play, the song preview is loaded from <code>audio-ssl.itunes.apple.com</code>.
+        When a round ends, the album artwork is loaded from a host under <code>mzstatic.com</code>.
+        The link "Listen on Apple Music" opens <code>music.apple.com</code> in a new tab.
+        Apple then sees your IP address; Apple's privacy policy is at <a href="https://www.apple.com/legal/privacy/">apple.com/legal/privacy/</a>.
+        These are the only requests to other hosts, and the site's Content-Security-Policy allows no others.
+      </p>
+      <p>Previews courtesy of Apple Music.</p>
+
+      <h2>Your rights</h2>
+      <p>
+        Under the GDPR you have the right of access (Article 15), to rectification (Article 16), to erasure (Article 17),
+        to restriction of processing (Article 18), to data portability (Article 20) and to object (Article 21).
+        To use them, write to <a href="mailto:oss@luminare.tech">oss@luminare.tech</a>.
+        You can also complain to the Austrian data protection authority, the Datenschutzbehörde
+        (<a href="https://www.dsb.gv.at/">dsb.gv.at</a>).
+      </p>
+    </main>
+    <footer>
+      <p>Previews courtesy of Apple Music</p>
+      <p>© 2026 <a href="https://luminare.tech/open-source/fiveguesses/">Luminare Development</a> · <a href="/legal/">Privacy and legal</a></p>
+    </footer>
+  </body>
+</html>
