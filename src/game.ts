@@ -104,14 +104,3 @@ export function findExactMatch(songs: readonly Song[], query: string): Song | nu
   const byTitle = songs.filter((s) => normalize(s.title) === q);
   return byTitle.length === 1 ? byTitle[0] : null;
 }
-
-export function shareText(puzzle: number, guesses: GuessEntry[], won: boolean): string {
-  const cells: string[] = guesses.map((g) => (g.kind === 'skip' ? '⬜' : '🟥'));
-  if (won) {
-    // The winning guess replaces the last recorded state.
-    cells.push('🟩');
-  }
-  while (cells.length < MAX_GUESSES) cells.push('⬛');
-  const score = won ? `${cells.indexOf('🟩') + 1}/${MAX_GUESSES}` : `X/${MAX_GUESSES}`;
-  return `FiveGuesses #${puzzle} ${score} 🎵\n${cells.slice(0, MAX_GUESSES).join('')}\nfiveguesses.app`;
-}

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { GuessEntry, RoundStatus, shareText, Song, songLabel } from '../game';
+import { SITE_HOST } from '../config';
+import { GuessEntry, RoundStatus, Song, songLabel } from '../game';
+import { shareText } from '../share';
 import { colors, radius } from '../theme';
 
 type Props = {
@@ -17,8 +19,7 @@ export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
 
   const doShare = async () => {
     if (puzzle == null) return;
-    // The board stores the winning row; the share builder adds it back on a win.
-    const text = shareText(puzzle, entries.filter((e) => e.kind !== 'correct'), won);
+    const text = shareText({ puzzle, entries, status, host: SITE_HOST });
     if (Platform.OS === 'web') {
       try {
         await navigator.clipboard.writeText(text);
