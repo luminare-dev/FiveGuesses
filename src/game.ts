@@ -39,13 +39,6 @@ export function dailySongIndex(puzzle: number, songCount: number): number {
   return (puzzle * 7919) % songCount;
 }
 
-export function randomSongIndex(songCount: number, excludeIndex: number): number {
-  if (songCount <= 1) return 0;
-  let idx = Math.floor(Math.random() * songCount);
-  if (idx === excludeIndex) idx = (idx + 1) % songCount;
-  return idx;
-}
-
 export function normalize(s: string): string {
   return s
     .toLowerCase()

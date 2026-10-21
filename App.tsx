@@ -1,12 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Board } from './src/components/Board';
 import { GuessInput } from './src/components/GuessInput';
 import { Reveal } from './src/components/Reveal';
 import { SnippetBar } from './src/components/SnippetBar';
 import { StatsCard } from './src/components/StatsCard';
-import { dailySongIndex, puzzleNumber, randomSongIndex, SNIPPET_SECONDS, songLabel } from './src/game';
+import { pickFreePlayIndex } from './src/freePlay';
+import { dailySongIndex, puzzleNumber, SNIPPET_SECONDS, songLabel } from './src/game';
 import { useSnippetPlayer } from './src/player';
 import { isOver, roundReducer, RoundEvent, RoundState, unlockedIndex } from './src/round';
 import { SONGS, SONG_COUNT } from './src/songs';
@@ -28,6 +29,8 @@ export default function App() {
   });
   const [stats, setStats] = useState<Stats | null>(null);
   const [restored, setRestored] = useState(false);
+  // Free rounds played in this session; forgotten on reload.
+  const playedFree = useRef(new Set<number>());
 
   const answer = SONGS[round.songIndex];
   const { play, stop, playingSeconds } = useSnippetPlayer(answer.previewUrl);
@@ -72,7 +75,8 @@ export default function App() {
 
   const startFreePlay = () => {
     stop();
-    const songIndex = randomSongIndex(SONG_COUNT, round.songIndex);
+    const songIndex = pickFreePlayIndex(SONG_COUNT, new Set([dailyIdx, ...playedFree.current]));
+    playedFree.current.add(songIndex);
     setRound((r) => roundReducer(r, { type: 'startFree', songIndex }, answer));
   };
 
