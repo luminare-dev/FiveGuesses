@@ -41,12 +41,15 @@ describe('t', () => {
   it('fills several placeholders', () => {
     expect(t('snippet.status', { seconds: 1, next: 2 })).toBe('1s unlocked · next: 2s');
   });
+  it('reads the playing status without a plural on the one-second tier', () => {
+    expect(t('snippet.playing', { seconds: 1 })).toBe('Playing the 1-second snippet');
+  });
   it('fills a text placeholder', () => {
     expect(t('footer.copyright', { studio: 'X' })).toBe('© 2026 X');
   });
   it('keeps a placeholder that has no parameter', () => {
-    expect(t('app.subtitle.daily', {})).toBe('Daily #{puzzle} · Name the song');
-    expect(t('app.subtitle.daily')).toBe('Daily #{puzzle} · Name the song');
+    expect(t('snippet.play', {})).toBe('Play the {seconds}-second snippet');
+    expect(t('snippet.play')).toBe('Play the {seconds}-second snippet');
   });
   it('returns a plain message unchanged', () => {
     expect(t('app.title')).toBe('FiveGuesses');

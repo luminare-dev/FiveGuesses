@@ -10,7 +10,7 @@ import { PROJECT_PAGE_URL } from './src/config';
 import { pickFreePlayIndex } from './src/freePlay';
 import { dailySongIndex, puzzleNumber, SNIPPET_SECONDS, songLabel } from './src/game';
 import { t, tNodes } from './src/i18n';
-import { useSnippetPlayer } from './src/player';
+import { useSnippetPlayer } from './src/audio/useSnippetPlayer';
 import { isOver, roundReducer, RoundEvent, RoundState, unlockedIndex } from './src/round';
 import { SONGS, SONG_COUNT } from './src/songs';
 import { applyResult, emptyStats, Stats } from './src/stats';
@@ -48,7 +48,7 @@ function Game() {
   const playedFree = useRef(new Set<number>());
 
   const answer = SONGS[round.songIndex];
-  const { play, stop, playingSeconds } = useSnippetPlayer(answer.previewUrl);
+  const snippet = useSnippetPlayer(answer.previewUrl);
 
   // Restore today's round + stats once.
   useEffect(() => {
@@ -80,7 +80,7 @@ function Game() {
     const daily = next.mode === 'daily' && next.puzzle != null;
     if (daily) saveRound({ puzzle: next.puzzle as number, entries: next.entries, status: next.status });
     if (!isOver(next)) return;
-    stop();
+    snippet.stop();
     if (daily) {
       const updated = applyResult(stats ?? emptyStats(), next.puzzle as number, next.status === 'won', next.entries.length);
       setStats(updated);
@@ -89,7 +89,7 @@ function Game() {
   };
 
   const startFreePlay = () => {
-    stop();
+    snippet.stop();
     const songIndex = pickFreePlayIndex(SONG_COUNT, new Set([dailyIdx, ...playedFree.current]));
     playedFree.current.add(songIndex);
     setRound((r) => roundReducer(r, { type: 'startFree', songIndex }, answer));
@@ -125,9 +125,9 @@ function Game() {
 
             <SnippetBar
               unlockedIndex={unlocked}
-              playingSeconds={playingSeconds}
-              onPlay={() => play(SNIPPET_SECONDS[unlocked])}
-              onStop={stop}
+              view={snippet.view}
+              onPlay={() => snippet.play(SNIPPET_SECONDS[unlocked])}
+              onStop={snippet.stop}
               disabled={over}
             />
 
