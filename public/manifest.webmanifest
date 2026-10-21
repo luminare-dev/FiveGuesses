@@ -1,0 +1,16 @@
+{
+  "name": "FiveGuesses",
+  "short_name": "FiveGuesses",
+  "description": "A daily song-guessing game. Name the track from a preview that doubles with every miss.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0A1224",
+  "background_color": "#0A1224",
+  "icons": [
+    { "src": "/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
