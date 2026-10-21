@@ -29,7 +29,8 @@
       "backgroundColor": "#0C0E12"
     },
     "plugins": [
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ]
   }
 }

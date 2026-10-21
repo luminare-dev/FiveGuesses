@@ -1,15 +1,24 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Python (template checks and tests)
+__pycache__/
+*.pyc
+.venv/
+# Release build output (scripts/package_release.py, scripts/package_web.py)
+dist/
+# Web build (npm run build)
+web-build/
+# Dependencies
 node_modules/
-
 # Expo
 .expo/
-dist/
-web-build/
 expo-env.d.ts
-
-# Native
+.metro-health-check*
+# Playwright
+test-results/
+playwright-report/
+coverage/
+# Native projects are not kept in this repository
+/ios
+/android
 .kotlin/
 *.orig.*
 *.jks
@@ -17,25 +26,15 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
+*.pem
+# TypeScript
+*.tsbuildinfo
+# Logs and OS files
 npm-debug.*
 yarn-debug.*
 yarn-error.*
-
-# macOS
 .DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-# generated native folders
-/ios
-/android
+# Never commit environment files
+.env
+.env.*
+!.env.example
