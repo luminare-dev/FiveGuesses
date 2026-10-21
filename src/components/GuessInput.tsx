@@ -2,7 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { searchSongs, Song, songLabel } from '../game';
 import { t } from '../i18n';
-import { colors, radius } from '../theme';
+import { radius } from '../theme';
+import type { Theme } from '../theme';
+import { text } from '../theme/typography';
+import { useTheme } from '../theme/useTheme';
+import { Button } from './Button';
 
 type Props = {
   songs: Song[];
@@ -13,6 +17,8 @@ type Props = {
 };
 
 export function GuessInput({ songs, nextSeconds, onGuess, onSkip, disabled }: Props) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Song | null>(null);
 
@@ -51,77 +57,55 @@ export function GuessInput({ songs, nextSeconds, onGuess, onSkip, disabled }: Pr
       <TextInput
         style={[styles.input, disabled && styles.disabled]}
         placeholder={t('guess.placeholder')}
-        placeholderTextColor={colors.dim}
+        placeholderTextColor={theme.textMuted}
         value={query}
         editable={!disabled}
-        onChangeText={(t) => {
-          setQuery(t);
+        onChangeText={(value) => {
+          setQuery(value);
           setSelected(null);
         }}
         autoCorrect={false}
         autoCapitalize="none"
       />
       <View style={styles.buttons}>
-        <Pressable
+        <Button
+          variant="secondary"
+          label={nextSeconds == null ? t('guess.skipLast') : t('guess.skip', { next: nextSeconds })}
           onPress={onSkip}
           disabled={disabled}
-          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed, disabled && styles.disabled]}
-        >
-          <Text style={styles.btnGhostText}>
-            {nextSeconds == null ? t('guess.skipLast') : t('guess.skip', { next: nextSeconds })}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={commit}
-          disabled={disabled || !selected}
-          style={({ pressed }) => [
-            styles.btn,
-            styles.btnPrimary,
-            pressed && styles.pressed,
-            (disabled || !selected) && styles.disabled,
-          ]}
-        >
-          <Text style={styles.btnPrimaryText}>{t('guess.submit')}</Text>
-        </Pressable>
+          style={styles.half}
+        />
+        <Button label={t('guess.submit')} onPress={commit} disabled={disabled || !selected} style={styles.half} />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { alignSelf: 'stretch', gap: 10 },
-  suggestions: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceHi,
-    overflow: 'hidden',
-  },
-  suggestion: { paddingVertical: 10, paddingHorizontal: 12 },
-  suggestionPressed: { backgroundColor: colors.surface },
-  suggestionText: { color: colors.text, fontSize: 15 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  buttons: { flexDirection: 'row', gap: 10 },
-  btn: {
-    flex: 1,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnPrimary: { backgroundColor: colors.accent },
-  btnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  btnGhost: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  btnGhostText: { color: colors.dim, fontWeight: '600', fontSize: 15 },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.45 },
-});
+function makeStyles(theme: Theme) {
+  return StyleSheet.create({
+    wrap: { alignSelf: 'stretch', gap: 10 },
+    suggestions: {
+      borderWidth: 1,
+      borderColor: theme.borderStrong,
+      borderRadius: radius.md,
+      backgroundColor: theme.surface,
+      overflow: 'hidden',
+    },
+    suggestion: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+    suggestionPressed: { backgroundColor: theme.surfaceHover },
+    suggestionText: { ...text(15), color: theme.text },
+    input: {
+      ...text(16),
+      borderWidth: 1,
+      borderColor: theme.borderStrong,
+      borderRadius: radius.md,
+      backgroundColor: theme.surface,
+      color: theme.text,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    buttons: { flexDirection: 'row', gap: 10 },
+    half: { flex: 1 },
+    disabled: { opacity: 0.45 },
+  });
+}

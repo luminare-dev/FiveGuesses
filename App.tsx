@@ -6,17 +6,31 @@ import { GuessInput } from './src/components/GuessInput';
 import { Reveal } from './src/components/Reveal';
 import { SnippetBar } from './src/components/SnippetBar';
 import { StatsCard } from './src/components/StatsCard';
+import { PROJECT_PAGE_URL } from './src/config';
 import { pickFreePlayIndex } from './src/freePlay';
-import { t } from './src/i18n';
 import { dailySongIndex, puzzleNumber, SNIPPET_SECONDS, songLabel } from './src/game';
+import { t, tNodes } from './src/i18n';
 import { useSnippetPlayer } from './src/player';
 import { isOver, roundReducer, RoundEvent, RoundState, unlockedIndex } from './src/round';
 import { SONGS, SONG_COUNT } from './src/songs';
 import { applyResult, emptyStats, Stats } from './src/stats';
 import { loadRound, loadStats, migrateRound, pruneRounds, saveRound, saveStats } from './src/storage';
-import { colors } from './src/theme';
+import type { Theme } from './src/theme';
+import { ThemeProvider } from './src/theme/ThemeProvider';
+import { display, tabularNums, text } from './src/theme/typography';
+import { useTheme } from './src/theme/useTheme';
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <Game />
+    </ThemeProvider>
+  );
+}
+
+function Game() {
+  const { theme, scheme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const puzzle = useMemo(() => puzzleNumber(), []);
   const dailyIdx = useMemo(() => dailySongIndex(puzzle, SONG_COUNT), [puzzle]);
   const songList = useMemo(() => [...SONGS], []);
@@ -91,9 +105,9 @@ export default function App() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -138,7 +152,21 @@ export default function App() {
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>{t('footer.previews')}</Text>
-              <Text style={styles.footerText}>{t('footer.copyright', { studio: t('about.studio') })}</Text>
+              <Text style={styles.footerText}>
+                {tNodes('footer.copyright', {
+                  studio: (
+                    <Text
+                      style={styles.footerLink}
+                      role="link"
+                      href={PROJECT_PAGE_URL}
+                      hrefAttrs={{ target: '_blank', rel: 'noopener noreferrer' }}
+                      aria-label={t('footer.projectPage')}
+                    >
+                      {t('about.studio')}
+                    </Text>
+                  ),
+                })}
+              </Text>
             </View>
           </View>
         </ScrollView>
@@ -147,13 +175,17 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { flexGrow: 1, alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  container: { width: '100%', maxWidth: 480, gap: 16, alignItems: 'center' },
-  header: { alignItems: 'center', gap: 4, marginBottom: 4 },
-  logo: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: 0.3 },
-  subtitle: { color: colors.dim, fontSize: 13 },
-  footer: { alignItems: 'center', gap: 2, marginTop: 8 },
-  footerText: { color: colors.dim, fontSize: 12 },
-});
+function makeStyles(theme: Theme) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: theme.background },
+    fill: { flex: 1 },
+    scroll: { flexGrow: 1, alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
+    container: { width: '100%', maxWidth: 480, gap: 16, alignItems: 'center' },
+    header: { alignItems: 'center', gap: 4, marginBottom: 4 },
+    logo: { ...display(26, '700'), color: theme.text },
+    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary },
+    footer: { alignItems: 'center', gap: 2, marginTop: 8 },
+    footerText: { ...text(12, '500'), color: theme.textMuted, textAlign: 'center' },
+    footerLink: { color: theme.link },
+  });
+}

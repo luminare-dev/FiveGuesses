@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Image, Linking, Platform, Share, StyleSheet, Text, View } from 'react-native';
 import { SITE_HOST } from '../config';
 import { GuessEntry, RoundStatus, Song, songLabel } from '../game';
 import { t } from '../i18n';
 import { shareText } from '../share';
-import { colors, radius } from '../theme';
+import { radius } from '../theme';
+import type { Theme } from '../theme';
+import { tabularNums, text } from '../theme/typography';
+import { useTheme } from '../theme/useTheme';
+import { Button } from './Button';
 
 type Props = {
   song: Song;
@@ -15,49 +19,51 @@ type Props = {
 };
 
 export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [copied, setCopied] = useState(false);
   const won = status === 'won';
+  const appleMusicUrl = song.appleMusicUrl;
 
   const doShare = async () => {
     if (puzzle == null) return;
-    const text = shareText({ puzzle, entries, status, host: SITE_HOST });
+    const message = shareText({ puzzle, entries, status, host: SITE_HOST });
     if (Platform.OS === 'web') {
       try {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(message);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {}
     } else {
       try {
-        await Share.share({ message: text });
+        await Share.share({ message });
       } catch {}
     }
   };
 
   return (
     <View style={styles.card}>
-      <Text style={[styles.headline, { color: won ? colors.green : colors.red }]}>
+      <Text style={[styles.headline, won ? styles.headlineWon : styles.headlineLost]}>
         {won ? t('reveal.won') : t('reveal.lost')}
       </Text>
       {!!song.artworkUrl && <Image source={{ uri: song.artworkUrl }} style={styles.art} />}
       <Text style={styles.title}>{songLabel(song)}</Text>
       <Text style={styles.year}>{song.year}</Text>
 
-      {!!song.appleMusicUrl && (
-        <Pressable onPress={() => Linking.openURL(song.appleMusicUrl!)} style={styles.appleBtn}>
-          <Text style={styles.appleBtnText}>{t('reveal.listen')}</Text>
-        </Pressable>
+      {appleMusicUrl !== null && (
+        <Button
+          variant="secondary"
+          label={t('reveal.listen')}
+          onPress={() => {
+            void Linking.openURL(appleMusicUrl);
+          }}
+          style={styles.listen}
+        />
       )}
 
       <View style={styles.actions}>
-        {puzzle != null && (
-          <Pressable onPress={doShare} style={[styles.btn, styles.btnPrimary]}>
-            <Text style={styles.btnPrimaryText}>{t('reveal.share')}</Text>
-          </Pressable>
-        )}
-        <Pressable onPress={onFreePlay} style={[styles.btn, styles.btnGhost]}>
-          <Text style={styles.btnGhostText}>{t('reveal.freePlay')}</Text>
-        </Pressable>
+        {puzzle != null && <Button label={t('reveal.share')} onPress={() => void doShare()} style={styles.half} />}
+        <Button variant="secondary" label={t('reveal.freePlay')} onPress={onFreePlay} style={styles.half} />
       </View>
       {copied && <Text style={styles.status}>{t('reveal.copied')}</Text>}
 
@@ -66,35 +72,28 @@ export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 20,
-    gap: 8,
-  },
-  headline: { fontSize: 20, fontWeight: '800' },
-  art: { width: 160, height: 160, borderRadius: radius.md, marginTop: 6 },
-  title: { color: colors.text, fontSize: 17, fontWeight: '700', textAlign: 'center', marginTop: 6 },
-  year: { color: colors.dim, fontSize: 14 },
-  appleBtn: {
-    marginTop: 8,
-    backgroundColor: '#fff',
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  appleBtnText: { color: '#111', fontWeight: '700', fontSize: 14 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 12, alignSelf: 'stretch' },
-  btn: { flex: 1, borderRadius: radius.md, paddingVertical: 12, alignItems: 'center' },
-  btnPrimary: { backgroundColor: colors.accent },
-  btnPrimaryText: { color: '#fff', fontWeight: '700' },
-  btnGhost: { borderWidth: 1, borderColor: colors.border },
-  btnGhostText: { color: colors.text, fontWeight: '600' },
-  status: { color: colors.dim, fontSize: 13 },
-  attribution: { color: colors.dim, fontSize: 11, marginTop: 10 },
-});
+function makeStyles(theme: Theme) {
+  return StyleSheet.create({
+    card: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 20,
+      gap: 8,
+    },
+    headline: { ...text(20, '700') },
+    headlineWon: { color: theme.correct },
+    headlineLost: { color: theme.textSecondary },
+    art: { width: 160, height: 160, borderRadius: radius.md, marginTop: 6 },
+    title: { ...text(17, '700'), color: theme.text, textAlign: 'center', marginTop: 6 },
+    year: { ...text(13, '500'), ...tabularNums, color: theme.textSecondary },
+    listen: { marginTop: 8 },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 12, alignSelf: 'stretch' },
+    half: { flex: 1 },
+    status: { ...text(13, '500'), color: theme.textSecondary },
+    attribution: { ...text(12, '500'), color: theme.textMuted, marginTop: 10 },
+  });
+}

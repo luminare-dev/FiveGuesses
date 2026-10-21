@@ -29,4 +29,5 @@ export const en = {
   'about.studio': 'Luminare Development',
   'footer.previews': 'Previews courtesy of Apple Music',
   'footer.copyright': '© 2026 {studio}',
+  'footer.projectPage': 'Luminare Development, project page',
 } as const satisfies Record<string, string>;

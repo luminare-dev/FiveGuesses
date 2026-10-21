@@ -1,8 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SNIPPET_SECONDS } from '../game';
 import { t } from '../i18n';
-import { colors, radius } from '../theme';
+import { radius } from '../theme';
+import type { Theme } from '../theme';
+import { tabularNums, text } from '../theme/typography';
+import { useTheme } from '../theme/useTheme';
 
 type Props = {
   unlockedIndex: number; // 0..4 — how many snippet tiers are unlocked
@@ -13,6 +16,8 @@ type Props = {
 };
 
 export function SnippetBar({ unlockedIndex, playingSeconds, onPlay, onStop, disabled }: Props) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const seconds = SNIPPET_SECONDS[Math.min(unlockedIndex, SNIPPET_SECONDS.length - 1)];
   const max = SNIPPET_SECONDS[SNIPPET_SECONDS.length - 1];
   const progress = useRef(new Animated.Value(0)).current;
@@ -38,7 +43,7 @@ export function SnippetBar({ unlockedIndex, playingSeconds, onPlay, onStop, disa
       <Pressable
         onPress={isPlaying ? onStop : onPlay}
         disabled={disabled}
-        style={({ pressed }) => [styles.playBtn, pressed && { opacity: 0.85 }, disabled && { opacity: 0.4 }]}
+        style={({ pressed }) => [styles.playBtn, pressed && styles.playBtnPressed, disabled && styles.disabled]}
       >
         <Text style={styles.playIcon}>{isPlaying ? '■' : '▶'}</Text>
       </Pressable>
@@ -73,28 +78,32 @@ export function SnippetBar({ unlockedIndex, playingSeconds, onPlay, onStop, disa
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'stretch' },
-  playBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playIcon: { color: '#fff', fontSize: 22, lineHeight: 26 },
-  barArea: { flex: 1, gap: 6 },
-  track: {
-    height: 14,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  unlocked: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: colors.surfaceHi },
-  progress: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: colors.accent },
-  tick: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: colors.border },
-  label: { color: colors.dim, fontSize: 12 },
-});
+function makeStyles(theme: Theme) {
+  return StyleSheet.create({
+    wrap: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'stretch' },
+    playBtn: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    playBtnPressed: { opacity: 0.8 },
+    disabled: { opacity: 0.45 },
+    playIcon: { color: theme.onPrimary, fontSize: 22, lineHeight: 26 },
+    barArea: { flex: 1, gap: 6 },
+    track: {
+      height: 14,
+      borderRadius: radius.sm,
+      backgroundColor: theme.track,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: 'hidden',
+    },
+    unlocked: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: theme.trackUnlocked },
+    progress: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: theme.progress },
+    tick: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: theme.tick },
+    label: { ...text(13, '500'), ...tabularNums, color: theme.textMuted },
+  });
+}

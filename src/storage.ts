@@ -1,9 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuessEntry, MAX_GUESSES, MAX_ZONE_SHIFT_DAYS, RoundStatus } from './game';
 import { emptyStats, normaliseStats, Stats } from './stats';
-
-// Re-exported so the stats type keeps one import path for the components that read it from here.
-export type { Stats } from './stats';
+import type { ThemePreference } from './theme';
 
 // Every key starts with "fg:" so resetAllData() can remove them in one go. The version in the
 // key changes when the stored shape changes; one reader per old version migrates it and the old
@@ -15,8 +13,6 @@ const ROUND_V2 = 'fg:round:v2:';
 const ROUND_V1 = 'fg:round:v1:';
 const roundKey = (puzzle: number) => `${ROUND_V2}${puzzle}`;
 const legacyRoundKey = (puzzle: number) => `${ROUND_V1}${puzzle}`;
-
-export type ThemePreference = 'system' | 'light' | 'dark';
 
 export type SavedRound = {
   version: 2;
