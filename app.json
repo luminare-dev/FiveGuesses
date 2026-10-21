@@ -5,8 +5,8 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#0C0E12",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0A1224",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.fiveguesses"
@@ -14,7 +14,7 @@
     "android": {
       "package": "app.fiveguesses",
       "adaptiveIcon": {
-        "backgroundColor": "#0C0E12",
+        "backgroundColor": "#0A1224",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -25,8 +25,10 @@
       "favicon": "./assets/favicon.png",
       "name": "FiveGuesses — daily song guessing",
       "shortName": "FiveGuesses",
-      "themeColor": "#0C0E12",
-      "backgroundColor": "#0C0E12"
+      "lang": "en",
+      "description": "A daily song-guessing game for the browser: five guesses, and every miss doubles the preview you hear (1, 2, 4, 8 and 16 seconds).",
+      "themeColor": "#0A1224",
+      "backgroundColor": "#0A1224"
     },
     "plugins": [
       "expo-audio",

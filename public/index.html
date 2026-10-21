@@ -12,13 +12,29 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="FiveGuesses" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="FiveGuesses" />
+    <meta property="og:description" content="A daily song-guessing game for the browser: five guesses, and every miss doubles the preview you hear (1, 2, 4, 8 and 16 seconds)." />
+    <meta property="og:url" content="https://fiveguesses.app/" />
+    <meta property="og:image" content="https://fiveguesses.app/og-image-1200x630.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="canonical" href="https://fiveguesses.app/" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preload" href="/fonts/Sora-Variable.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <noscript>FiveGuesses needs JavaScript to run. The privacy and legal page is at /legal/.</noscript>
+    <noscript>
+      <p>FiveGuesses needs JavaScript to run.</p>
+      <footer>
+        <p>Previews courtesy of Apple Music</p>
+        <p>© 2026 <a href="https://luminare.tech/open-source/fiveguesses/">Luminare Development</a> · <a href="/legal/">Privacy and legal</a></p>
+      </footer>
+    </noscript>
     <div id="root"></div>
+    <script src="/register-sw.js" defer></script>
   </body>
 </html>
