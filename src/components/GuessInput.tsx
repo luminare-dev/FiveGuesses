@@ -1,16 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { searchSongs, Song, songLabel } from '../game';
+import { t } from '../i18n';
 import { colors, radius } from '../theme';
 
 type Props = {
   songs: Song[];
+  nextSeconds: number | null; // seconds a skip unlocks; null on the last guess
   onGuess: (song: Song) => void;
   onSkip: () => void;
   disabled?: boolean;
 };
 
-export function GuessInput({ songs, onGuess, onSkip, disabled }: Props) {
+export function GuessInput({ songs, nextSeconds, onGuess, onSkip, disabled }: Props) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Song | null>(null);
 
@@ -48,7 +50,7 @@ export function GuessInput({ songs, onGuess, onSkip, disabled }: Props) {
       )}
       <TextInput
         style={[styles.input, disabled && styles.disabled]}
-        placeholder="Know it? Search artist or title…"
+        placeholder={t('guess.placeholder')}
         placeholderTextColor={colors.dim}
         value={query}
         editable={!disabled}
@@ -65,7 +67,9 @@ export function GuessInput({ songs, onGuess, onSkip, disabled }: Props) {
           disabled={disabled}
           style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed, disabled && styles.disabled]}
         >
-          <Text style={styles.btnGhostText}>Skip (+ more audio)</Text>
+          <Text style={styles.btnGhostText}>
+            {nextSeconds == null ? t('guess.skipLast') : t('guess.skip', { next: nextSeconds })}
+          </Text>
         </Pressable>
         <Pressable
           onPress={commit}
@@ -77,7 +81,7 @@ export function GuessInput({ songs, onGuess, onSkip, disabled }: Props) {
             (disabled || !selected) && styles.disabled,
           ]}
         >
-          <Text style={styles.btnPrimaryText}>Guess</Text>
+          <Text style={styles.btnPrimaryText}>{t('guess.submit')}</Text>
         </Pressable>
       </View>
     </View>

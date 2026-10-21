@@ -1,0 +1,32 @@
+// Every user-facing string of the app. Keys are dotted, each segment lower-case or camelCase
+// (stats.winRate), one sentence per key; placeholders are single-brace lower-case names such as
+// {puzzle}. Components read the strings through t and tNodes from ./index; nothing in the UI
+// concatenates sentence fragments.
+export const en = {
+  'app.title': 'FiveGuesses',
+  'app.subtitle.daily': 'Daily #{puzzle} · Name the song',
+  'app.subtitle.free': 'Free play · Name the song',
+  'snippet.status': '{seconds}s unlocked · next: {next}s',
+  'snippet.statusMax': '{seconds}s unlocked',
+  'guess.placeholder': 'Search artist or title',
+  'guess.submit': 'Guess',
+  'guess.skip': 'Skip · unlock {next}s',
+  'guess.skipLast': 'Skip',
+  'board.partialHint': 'right artist',
+  'board.skipped': 'Skipped',
+  'reveal.won': 'Correct!',
+  'reveal.lost': 'Out of guesses',
+  'reveal.listen': 'Listen on Apple Music',
+  'reveal.share': 'Share result',
+  'reveal.copied': 'Copied to clipboard',
+  'reveal.freePlay': 'Play a free round',
+  'reveal.previewsCredit': 'Previews courtesy of Apple Music',
+  'stats.played': 'Played',
+  'stats.winRate': 'Win rate',
+  'stats.winRateValue': '{percent}%',
+  'stats.streak': 'Current streak',
+  'stats.best': 'Best streak',
+  'about.studio': 'Luminare Development',
+  'footer.previews': 'Previews courtesy of Apple Music',
+  'footer.copyright': '© 2026 {studio}',
+} as const satisfies Record<string, string>;

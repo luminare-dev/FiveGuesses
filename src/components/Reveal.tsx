@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { SITE_HOST } from '../config';
 import { GuessEntry, RoundStatus, Song, songLabel } from '../game';
+import { t } from '../i18n';
 import { shareText } from '../share';
 import { colors, radius } from '../theme';
 
@@ -36,7 +37,7 @@ export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
   return (
     <View style={styles.card}>
       <Text style={[styles.headline, { color: won ? colors.green : colors.red }]}>
-        {won ? 'Got it! 🙌' : 'Out of guesses'}
+        {won ? t('reveal.won') : t('reveal.lost')}
       </Text>
       {!!song.artworkUrl && <Image source={{ uri: song.artworkUrl }} style={styles.art} />}
       <Text style={styles.title}>{songLabel(song)}</Text>
@@ -44,22 +45,23 @@ export function Reveal({ song, status, entries, puzzle, onFreePlay }: Props) {
 
       {!!song.appleMusicUrl && (
         <Pressable onPress={() => Linking.openURL(song.appleMusicUrl!)} style={styles.appleBtn}>
-          <Text style={styles.appleBtnText}> Listen on Apple Music</Text>
+          <Text style={styles.appleBtnText}>{t('reveal.listen')}</Text>
         </Pressable>
       )}
 
       <View style={styles.actions}>
         {puzzle != null && (
           <Pressable onPress={doShare} style={[styles.btn, styles.btnPrimary]}>
-            <Text style={styles.btnPrimaryText}>{copied ? 'Copied!' : 'Share result'}</Text>
+            <Text style={styles.btnPrimaryText}>{t('reveal.share')}</Text>
           </Pressable>
         )}
         <Pressable onPress={onFreePlay} style={[styles.btn, styles.btnGhost]}>
-          <Text style={styles.btnGhostText}>Play a free round</Text>
+          <Text style={styles.btnGhostText}>{t('reveal.freePlay')}</Text>
         </Pressable>
       </View>
+      {copied && <Text style={styles.status}>{t('reveal.copied')}</Text>}
 
-      <Text style={styles.attribution}>Song previews courtesy of Apple Music</Text>
+      <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
     </View>
   );
 }
@@ -93,5 +95,6 @@ const styles = StyleSheet.create({
   btnPrimaryText: { color: '#fff', fontWeight: '700' },
   btnGhost: { borderWidth: 1, borderColor: colors.border },
   btnGhostText: { color: colors.text, fontWeight: '600' },
+  status: { color: colors.dim, fontSize: 13 },
   attribution: { color: colors.dim, fontSize: 11, marginTop: 10 },
 });

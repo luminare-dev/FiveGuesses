@@ -7,6 +7,7 @@ import { Reveal } from './src/components/Reveal';
 import { SnippetBar } from './src/components/SnippetBar';
 import { StatsCard } from './src/components/StatsCard';
 import { pickFreePlayIndex } from './src/freePlay';
+import { t } from './src/i18n';
 import { dailySongIndex, puzzleNumber, SNIPPET_SECONDS, songLabel } from './src/game';
 import { useSnippetPlayer } from './src/player';
 import { isOver, roundReducer, RoundEvent, RoundState, unlockedIndex } from './src/round';
@@ -82,6 +83,7 @@ export default function App() {
 
   const over = isOver(round);
   const unlocked = unlockedIndex(round);
+  const nextSeconds = unlocked + 1 < SNIPPET_SECONDS.length ? SNIPPET_SECONDS[unlocked + 1] : null;
 
   if (!restored) {
     return <View style={styles.root} />;
@@ -97,13 +99,11 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
             <View style={styles.header}>
-              <Text style={styles.logo}>
-                ✋ Five<Text style={{ color: colors.accent }}>Guesses</Text>
-              </Text>
+              <Text style={styles.logo}>{t('app.title')}</Text>
               <Text style={styles.subtitle}>
-                {round.mode === 'daily'
-                  ? `Daily #${round.puzzle} · Name the song`
-                  : 'Free play · Name the song'}
+                {round.mode === 'daily' && round.puzzle != null
+                  ? t('app.subtitle.daily', { puzzle: round.puzzle })
+                  : t('app.subtitle.free')}
               </Text>
             </View>
 
@@ -130,12 +130,16 @@ export default function App() {
             ) : (
               <GuessInput
                 songs={songList}
+                nextSeconds={nextSeconds}
                 onGuess={(song) => apply({ type: 'guess', song })}
                 onSkip={() => apply({ type: 'skip' })}
               />
             )}
 
-            <Text style={styles.footer}>Previews courtesy of Apple Music · fiveguesses.app</Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>{t('footer.previews')}</Text>
+              <Text style={styles.footerText}>{t('footer.copyright', { studio: t('about.studio') })}</Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -150,5 +154,6 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', gap: 4, marginBottom: 4 },
   logo: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: 0.3 },
   subtitle: { color: colors.dim, fontSize: 13 },
-  footer: { color: colors.dim, fontSize: 11, marginTop: 8 },
+  footer: { alignItems: 'center', gap: 2, marginTop: 8 },
+  footerText: { color: colors.dim, fontSize: 12 },
 });

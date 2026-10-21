@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SNIPPET_SECONDS } from '../game';
+import { t } from '../i18n';
 import { colors, radius } from '../theme';
 
 type Props = {
@@ -63,7 +64,9 @@ export function SnippetBar({ unlockedIndex, playingSeconds, onPlay, onStop, disa
           ))}
         </View>
         <Text style={styles.label}>
-          {seconds}s unlocked{unlockedIndex < SNIPPET_SECONDS.length - 1 ? ` · next: ${SNIPPET_SECONDS[unlockedIndex + 1]}s` : ''}
+          {unlockedIndex < SNIPPET_SECONDS.length - 1
+            ? t('snippet.status', { seconds, next: SNIPPET_SECONDS[unlockedIndex + 1] })
+            : t('snippet.statusMax', { seconds })}
         </Text>
       </View>
     </View>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { GuessEntry, MAX_GUESSES } from '../game';
+import { t } from '../i18n';
 import { colors, radius } from '../theme';
 
 type Props = { entries: GuessEntry[]; activeIndex: number | null };
@@ -16,7 +17,11 @@ export function Board({ entries, activeIndex }: Props) {
         <View key={i} style={[styles.row, rowStyles[entry.kind]]}>
           <Text style={styles.mark}>{MARKS[entry.kind]}</Text>
           <Text style={[styles.rowText, entry.kind === 'skip' && styles.skipText]} numberOfLines={1}>
-            {entry.kind === 'skip' ? 'Skipped' : entry.kind === 'partial' ? `${entry.text} · right artist` : entry.text}
+            {entry.kind === 'skip'
+              ? t('board.skipped')
+              : entry.kind === 'partial'
+                ? `${entry.text} · ${t('board.partialHint')}`
+                : entry.text}
           </Text>
         </View>
       );

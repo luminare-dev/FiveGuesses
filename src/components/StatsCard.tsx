@@ -1,15 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Stats } from '../storage';
+import { t } from '../i18n';
+import { Stats, winRate } from '../stats';
 import { colors, radius } from '../theme';
 
 export function StatsCard({ stats }: { stats: Stats }) {
-  const winRate = stats.played ? Math.round((stats.wins / stats.played) * 100) : 0;
   const items: Array<[string, string | number]> = [
-    ['Played', stats.played],
-    ['Win %', `${winRate}`],
-    ['Streak', stats.streak],
-    ['Best', stats.maxStreak],
+    [t('stats.played'), stats.played],
+    [t('stats.winRate'), t('stats.winRateValue', { percent: winRate(stats) })],
+    [t('stats.streak'), stats.streak],
+    [t('stats.best'), stats.maxStreak],
   ];
   return (
     <View style={styles.row}>
