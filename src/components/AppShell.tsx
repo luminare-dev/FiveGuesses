@@ -122,7 +122,6 @@ export function AppShell() {
                   song={game.answer}
                   status={round.status}
                   mode={round.mode}
-                  countdownText={game.countdownText}
                   shareText={game.shareText}
                   shareOutcome={game.shareOutcome}
                   onShare={game.share}
@@ -142,7 +141,7 @@ export function AppShell() {
         openerRef={statsButton}
         stats={stats}
         todayPuzzle={game.puzzle}
-        countdownText={over && daily ? game.countdownText : null}
+        showCountdown={over && daily}
       />
       <AboutSheet
         visible={sheet === 'about'}
