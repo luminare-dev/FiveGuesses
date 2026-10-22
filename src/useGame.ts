@@ -14,7 +14,6 @@ import { SONGS, SONG_COUNT } from './songs';
 import { applyResult, emptyStats } from './stats';
 import type { Stats } from './stats';
 import { loadRound, loadStats, migrateRound, pruneRounds, resetAllData, saveRound, saveStats } from './storage';
-import { useCountdown } from './useCountdown';
 import { useDailyPuzzle } from './useDailyPuzzle';
 
 export type GameOptions = {
@@ -45,8 +44,6 @@ export type Game = {
   skip: () => void;
   startFreePlay: () => void;
   backToDaily: () => void;
-  // HH:MM:SS until the next daily song.
-  countdownText: string;
   // The share ladder of a finished daily round; null while playing and in free play.
   shareText: string | null;
   // How the last share attempt of this round ended; null before the first attempt.
@@ -91,7 +88,7 @@ export function useGame(options: GameOptions = {}): Game {
     announceRef.current?.(message);
   }, []);
 
-  const { puzzle, recompute } = useDailyPuzzle();
+  const { puzzle } = useDailyPuzzle();
   const dailyIndex = useMemo(() => dailySongIndex(puzzle, SONG_COUNT), [puzzle]);
   const puzzleRef = useRef(puzzle);
   puzzleRef.current = puzzle;
@@ -110,7 +107,6 @@ export function useGame(options: GameOptions = {}): Game {
   const answer = SONGS[round.songIndex];
   const snippet = useSnippetPlayer(answer.previewUrl);
   const { stop } = snippet;
-  const countdownText = useCountdown(recompute);
 
   // Mount and every rollover: read the saved round and the stats for this puzzle. A daily
   // board is replaced by the new day's; a free round keeps going underneath the new puzzle.
@@ -279,7 +275,6 @@ export function useGame(options: GameOptions = {}): Game {
     skip,
     startFreePlay,
     backToDaily,
-    countdownText,
     shareText,
     shareOutcome,
     share,

@@ -1,29 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { formatCountdown, msUntilLocalMidnight, nextLocalMidnight } from './clock';
+import { useEffect, useState } from 'react';
+import { formatCountdown, msUntilLocalMidnight } from './clock';
 
 // The time left until the next local midnight as HH:MM:SS, ticking once a second from the
-// wall clock. onZero runs once when the target is reached; the target then moves to the
-// following midnight. A tab that slept past midnight catches up on its next tick.
-export function useCountdown(onZero: () => void): string {
-  const onZeroRef = useRef(onZero);
-  onZeroRef.current = onZero;
-  const [remaining, setRemaining] = useState<number>(() => msUntilLocalMidnight(new Date()));
+// wall clock; past midnight it counts down to the following one, and a tab that slept catches
+// up on its next tick. Only the Countdown component calls it, so the tick re-renders that text
+// and nothing else; the rollover itself is useDailyPuzzle's job.
+export function useCountdown(): string {
+  const [text, setText] = useState<string>(() => formatCountdown(msUntilLocalMidnight(new Date())));
 
   useEffect(() => {
-    let target = nextLocalMidnight(new Date()).getTime();
-    const tick = () => {
-      const now = Date.now();
-      let left = target - now;
-      if (left <= 0) {
-        onZeroRef.current();
-        target = nextLocalMidnight(new Date(now)).getTime();
-        left = target - now;
-      }
-      setRemaining(left);
-    };
-    const timer = setInterval(tick, 1000);
+    const timer = setInterval(() => setText(formatCountdown(msUntilLocalMidnight(new Date()))), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  return formatCountdown(remaining);
+  return text;
 }

@@ -5,16 +5,17 @@ import { t } from '../i18n';
 import type { Theme } from '../theme';
 import { tabularNums, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
+import { useCountdown } from '../useCountdown';
 
 type Props = {
-  // HH:MM:SS from useCountdown.
-  time: string;
   style?: StyleProp<TextStyle>;
 };
 
-// The time until the next daily song. A ticking timer is never announced; the live region
-// says when the new song is ready.
-export function Countdown({ time, style }: Props) {
+// The time until the next daily song. It ticks on its own, so the once-a-second update
+// renders this text and not the screen around it. A ticking timer is never announced; the
+// live region says when the new song is ready.
+export function Countdown({ style }: Props) {
+  const time = useCountdown();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   return (
