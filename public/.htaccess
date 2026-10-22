@@ -15,7 +15,7 @@ AddDefaultCharset utf-8
 </IfModule>
 
 <IfModule mod_headers.c>
-  Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.mzstatic.com; media-src https://audio-ssl.itunes.apple.com; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self' data: https://*.mzstatic.com; media-src https://audio-ssl.itunes.apple.com; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"

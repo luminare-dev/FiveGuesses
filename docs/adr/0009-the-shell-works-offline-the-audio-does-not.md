@@ -38,12 +38,29 @@ and the artwork are never stored. Offline, the game shows
 the statistics are available. The worker is registered from `public/register-sw.js`, a separate
 file, so `script-src 'self'` holds.
 
-Content-Security-Policy: the shell ships with `style-src 'self'`. react-native-web writes its
-styles through the CSS object model, which the policy does not block, and the shell has no inline
-`<style>` (the build fails if the export ever adds one). The Playwright test `e2e/csp.spec.ts`
-serves the build with the exact header from `public/.htaccess` and fails on any
-`securitypolicyviolation` event; if it ever proves a violation, `style-src` is relaxed to
-`'self' 'unsafe-inline'` and the report is added to this file.
+Content-Security-Policy: the shell was first served with `style-src 'self'`. react-native-web
+writes its styles through the CSS object model, which the policy does not block, and the shell has
+no inline `<style>` (the build fails if the export ever adds one). The Playwright test
+`e2e/csp.spec.ts` serves the build with the exact header from `public/.htaccess` and fails on any
+`securitypolicyviolation` event.
+
+Outcome of that test (2026-10-21): one violation. Report: `violatedDirective` and
+`effectiveDirective` `style-src-elem`, `blockedURI` `inline`, `sourceFile` the hashed bundle
+`/_expo/static/js/web/index-<hash>.js` (line 90, column 512 in the build of that day),
+`disposition` `enforce`, an empty `sample`. Cause: react-native-web
+(`StyleSheet/dom/createCSSStyleSheet.js`) inserts an empty `<style id="react-native-stylesheet">`
+element as the first child of `<head>` and only then adds its rules through the CSS object model.
+The rule insertion is not governed by the policy, but the element is: Chromium reports the empty
+inline element under `style-src-elem`, leaves its sheet unusable, and the page renders without styles (the sheets never
+gain their dialog role because the fade never ends). `public/.htaccess` therefore allows that one
+element by its hash, `style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='`
+(the SHA-256 of the empty string, the value Chromium's console message names). With that value the
+test records no violation, the style element carries the app's rules and every scenario passes.
+`'unsafe-inline'` would also pass, but it allows every inline style; the hash allows exactly the
+empty element. The hash was verified in Chromium 141 by the test; other browsers apply the same
+hash rule to inline style elements but were not run here. Should a react-native-web update ever
+write text into that element, the test fails in CI and the hash has to follow it (or give way to
+`'unsafe-inline'`).
 
 ## Consequences
 

@@ -91,8 +91,8 @@ The decisions behind this project are recorded as short ADRs in [docs/adr/](docs
 | React Native / react-native-web | 0.86.3 / 0.21.2 | the versions Expo SDK 57 installs |
 | expo-audio | 57.0.5 | the version Expo SDK 57 installs |
 | TypeScript | 6.0.3 | 6.x |
-| Browsers | Chromium 141 (end-to-end tests) | the two latest major versions of Chrome, Firefox, Safari and iOS Safari |
-| Web server for the static build | Apache 2.4 with `mod_rewrite`, `mod_headers`, `mod_deflate` | Apache 2.4.x; any static host without the `.htaccess` headers |
+| Browsers | Chromium 141 (end-to-end tests); Firefox, Safari and iOS Safari not tested | the two latest major versions of Chrome, Firefox, Safari and iOS Safari |
+| Web server for the static build | not tested: `public/.htaccess` is written for Apache 2.4 with `mod_rewrite`, `mod_headers` and `mod_deflate`, and step 6 of [the runbook](docs/runbook.md) checks its headers on the host | Apache 2.4.x; any static host without the `.htaccess` headers |
 
 Fixes go into the latest minor release only. See the
 [security policy](https://github.com/luminare-dev/.github/blob/main/SECURITY.md) for reporting.
@@ -116,11 +116,11 @@ Fixes go into the latest minor release only. See the
 
 | What | Value | How it was measured |
 |---|---|---|
-| Unit tests | measured in the integration step | `npm test` (Jest) |
-| End-to-end tests | measured in the integration step | `npm run e2e` (Playwright in Chromium 141, previews stubbed) |
-| Web build | measured in the integration step | `npm run build` prints the bundle size and its gzip size |
-| Offline start | measured in the integration step | Playwright scenario `e2e/pwa.spec.ts` (`context.setOffline(true)`, then reload) |
-| Template checks | measured in the integration step | `python3 scripts/forbidden_words.py` |
+| Unit tests | 359 tests in 10 files pass | `npm test` (Jest), 2026-10-24 |
+| End-to-end tests | 37 scenarios in 12 files pass in Chromium 141 | `npm run e2e` (Playwright in Chromium 141, previews stubbed), 2026-10-24 |
+| Web build | 194 kB of JavaScript after gzip (684 kB uncompressed) | `npm run build` prints the bundle size and its gzip size, 2026-10-24 |
+| Offline start | the shell, the saved round and the privacy page open with the network switched off | Playwright scenario `e2e/pwa.spec.ts` (`context.setOffline(true)`, then reload), 2026-10-24 |
+| Template checks | 0 findings | `python3 scripts/forbidden_words.py`, 2026-10-24 |
 
 ## Development
 
