@@ -1,0 +1,114 @@
+# Deploy: puts a published release on the Apache host. The run downloads the web archive and
+# SHA256SUMS of that release, verifies the checksum, extracts the site and syncs it with rsync over
+# SSH. It never builds anything: the files are the ones the release workflow built and checksummed.
+# Start it with the release tag once the release run has published the release (docs/runbook.md
+# step 4): Actions -> deploy -> Run workflow, or "gh workflow run deploy.yml -f tag=vX.Y.Z".
+# The release workflow publishes with GITHUB_TOKEN, and a release published that way starts no
+# workflow, so the "release" trigger fires only for a release a person publishes (for example a
+# draft published by hand on the releases page).
+# The deploy job runs only when the four repository secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY
+# and DEPLOY_PATH are set (docs/runbook.md); without them the run is skipped and stays green.
+name: deploy
+
+on:
+  release:   # only a release published by a person; see the header
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to deploy (vX.Y.Z).
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      configured: ${{ steps.secrets.outputs.configured }}
+    steps:
+      - name: Are the four deploy secrets set?
+        id: secrets
+        env:
+          # Secrets are not available in a job-level "if", so a step turns the answer into an output.
+          CONFIGURED: >-
+            ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_USER != '' &&
+            secrets.DEPLOY_KEY != '' && secrets.DEPLOY_PATH != '' }}
+        run: echo "configured=$CONFIGURED" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: deploy
+    needs: check
+    if: ${{ needs.check.outputs.configured == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read   # download the files attached to the release
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Download the web archive and SHA256SUMS of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ -n "$TAG" ] || { echo "error: no release tag"; exit 1; }
+          gh release download "$TAG" --pattern 'fiveguesses-web-*.tar.gz' --pattern SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY"
+          sha256sum -c --ignore-missing SHA256SUMS
+
+      - name: Extract the site
+        run: |
+          set -euo pipefail
+          set -- fiveguesses-web-*.tar.gz
+          if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+            echo "error: expected exactly one web archive, got: $*"
+            exit 1
+          fi
+          mkdir site
+          # --touch: the archive stores mtime 0 for reproducible bytes. Dated 0, a changed file of the
+          # same size (index.html, sw.js) looks unchanged to rsync and keeps Apache's old ETag.
+          tar -xzf "$1" --strip-components=1 --touch -C site
+          test -f site/index.html
+          test -f site/.htaccess
+
+      - name: Sync the site to the host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy_key"
+          ssh_opts=(-i "$RUNNER_TEMP/deploy_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+          # A relative DEPLOY_PATH ("." with the rrsync key of docs/runbook.md) is safe only while the
+          # key's forced command keeps it inside the docroot. rrsync refuses every command but rsync,
+          # so a plain command that succeeds means the key is not restricted: stop before
+          # --delete-after could empty the user's home directory.
+          case "$DEPLOY_PATH" in
+            /*) ;;
+            *)
+              if ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" true < /dev/null > /dev/null 2>&1; then
+                echo "error: DEPLOY_PATH is relative, but the deploy key is not limited to rsync"
+                echo "(docs/runbook.md, step 2)"
+                exit 1
+              fi
+              ;;
+          esac
+          # .well-known/ stays: the host keeps its certificate challenge folder in the docroot.
+          # --delay-updates and --delete-after move the new files into place together at the end and
+          # delete the old bundle only after that, so a sync that fails midway leaves the old site.
+          rsync -az --delete-after --delay-updates --exclude='.well-known/' \
+            -e "ssh ${ssh_opts[*]}" \
+            ./site/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+          rm -f "$RUNNER_TEMP/deploy_key"
