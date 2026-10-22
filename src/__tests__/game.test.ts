@@ -97,6 +97,13 @@ describe('normalize and songLabel', () => {
     expect(normalize('  Dua   Lipa ')).toBe('dua lipa');
     expect(normalize('')).toBe('');
   });
+  it('drops apostrophes and periods and breaks words at every other mark', () => {
+    expect(normalize("Hips Don't Lie")).toBe('hips dont lie');
+    expect(normalize('Bomfunk MC’s')).toBe('bomfunk mcs');
+    expect(normalize('R.E.M.')).toBe('rem');
+    expect(normalize('AC/DC')).toBe('ac dc');
+    expect(normalize('Anti-Hero')).toBe('anti hero');
+  });
   it('joins artist and title with an en dash', () => {
     expect(songLabel(byLabel('Dua Lipa – Levitating'))).toBe('Dua Lipa – Levitating');
     expect(songLabel(song(1, 'A', 'B'))).toBe('A – B');
@@ -155,6 +162,17 @@ describe('searchSongs', () => {
   it('finds nothing for a query no song contains', () => {
     expect(searchSongs(SONGS, 'zzzz')).toEqual([]);
   });
+  it('finds a name typed without its punctuation', () => {
+    expect(songLabel(searchSongs(SONGS, 'hips dont lie')[0])).toBe("Shakira – Hips Don't Lie");
+    expect(songLabel(searchSongs(SONGS, 'acdc thunderstruck')[0])).toBe('AC/DC – Thunderstruck');
+    expect(songLabel(searchSongs(SONGS, 'antihero')[0])).toBe('Taylor Swift – Anti-Hero');
+    expect(songLabel(searchSongs(SONGS, 'rem losing')[0])).toBe('R.E.M. – Losing My Religion');
+    expect(searchSongs(SONGS, 'aha').map(songLabel)).toContain('a-ha – Take On Me');
+  });
+  it('needs two characters after normalisation', () => {
+    expect(searchSongs(SONGS, 'a-')).toEqual([]);
+    expect(searchSongs(SONGS, 'R.')).toEqual([]);
+  });
 });
 
 describe('findExactMatch', () => {
@@ -171,6 +189,12 @@ describe('findExactMatch', () => {
     expect(findExactMatch(SONGS, 'la')).toBeNull();
     expect(findExactMatch(SONGS, 'levitat')).toBeNull();
     expect(findExactMatch(SONGS, '')).toBeNull();
+  });
+  it('accepts a name typed without its punctuation', () => {
+    expect(findExactMatch(SONGS, 'hips dont lie')).toBe(byLabel("Shakira – Hips Don't Lie"));
+    expect(findExactMatch(SONGS, 'acdc thunderstruck')).toBe(byLabel('AC/DC – Thunderstruck'));
+    expect(findExactMatch(SONGS, 'antihero')).toBe(byLabel('Taylor Swift – Anti-Hero'));
+    expect(findExactMatch(SONGS, "Hips Don't Lie")).toBe(byLabel("Shakira – Hips Don't Lie"));
   });
   it('rejects a title shared by two songs', () => {
     const list = [song(1, 'A', 'Same'), song(2, 'B', 'Same')];

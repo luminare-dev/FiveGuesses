@@ -6,7 +6,7 @@ import type { ThemePreference } from './theme';
 // Every key starts with "fg:" so resetAllData() can remove them in one go. The version in the
 // key changes when the stored shape changes; one reader per old version migrates it and the old
 // key is removed after a successful write. Nothing in this module throws.
-const PREFIX = 'fg:';
+export const STORAGE_PREFIX = 'fg:';
 const STATS_KEY = 'fg:stats:v1';
 const THEME_KEY = 'fg:theme:v1';
 const ROUND_V2 = 'fg:round:v2:';
@@ -149,6 +149,6 @@ export function saveThemePreference(preference: ThemePreference): Promise<boolea
 
 // Removes every key this app stored (prefix fg:); other keys in the same storage are left alone.
 export async function resetAllData(): Promise<boolean> {
-  const ours = (await allKeys()).filter((key) => key.startsWith(PREFIX));
+  const ours = (await allKeys()).filter((key) => key.startsWith(STORAGE_PREFIX));
   return removeKeys(ours);
 }

@@ -39,14 +39,24 @@ export function dailySongIndex(puzzle: number, songCount: number): number {
   return (puzzle * 7919) % songCount;
 }
 
+// Apostrophes and periods vanish ("Don't" -> "dont", "R.E.M." -> "rem") and every other mark
+// becomes a word break ("AC/DC" -> "ac dc"), so a guess typed without the punctuation (phone
+// keyboards add none with autocorrect off) still finds the song.
 export function normalize(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
+    .replace(/['\u2018\u2019\u02bc`\u00b4.]/g, '')
     .replace(/[^a-z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// A normalised text without its spaces: "acdc", "aha" and "antihero" then match "AC/DC", "a-ha"
+// and "Anti-Hero", whose marks became word breaks.
+function compact(normalised: string): string {
+  return normalised.replace(/ /g, '');
 }
 
 export function songLabel(s: Song): string {
@@ -76,14 +86,16 @@ export function classifyGuess(guess: Song, answer: Song): Exclude<GuessKind, 'sk
 export function searchSongs(songs: readonly Song[], query: string, limit = 8): Song[] {
   const q = normalize(query);
   if (q.length < 2) return [];
+  // Compared without spaces, so a word break the player left out (or added) does not matter.
+  const qc = compact(q);
   const scored = songs
     .map((s) => {
-      const label = normalize(`${s.artist} ${s.title}`);
-      const title = normalize(s.title);
+      const label = compact(normalize(`${s.artist} ${s.title}`));
+      const title = compact(normalize(s.title));
       let score = -1;
-      if (title.startsWith(q)) score = 3;
-      else if (label.startsWith(q)) score = 2;
-      else if (label.includes(q)) score = 1;
+      if (title.startsWith(qc)) score = 3;
+      else if (label.startsWith(qc)) score = 2;
+      else if (label.includes(qc)) score = 1;
       return { s, score };
     })
     .filter((x) => x.score >= 0)
@@ -93,14 +105,12 @@ export function searchSongs(songs: readonly Song[], query: string, limit = 8): S
 
 // A typed guess counts without picking a suggestion when it names exactly one song: the full
 // "artist title" or "artist – title" (the dash vanishes under normalisation), or a title that
-// only one song in the list carries.
+// only one song in the list carries. Spaces are ignored, as in searchSongs.
 export function findExactMatch(songs: readonly Song[], query: string): Song | null {
-  const q = normalize(query);
+  const q = compact(normalize(query));
   if (!q) return null;
-  const full = songs.find(
-    (s) => normalize(`${s.artist} ${s.title}`) === q || normalize(songLabel(s)) === q
-  );
+  const full = songs.find((s) => compact(normalize(`${s.artist} ${s.title}`)) === q);
   if (full) return full;
-  const byTitle = songs.filter((s) => normalize(s.title) === q);
+  const byTitle = songs.filter((s) => compact(normalize(s.title)) === q);
   return byTitle.length === 1 ? byTitle[0] : null;
 }
