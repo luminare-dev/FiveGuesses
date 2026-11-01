@@ -219,7 +219,7 @@ if (!html.includes('<div id="root">')) fail('web-build/index.html lacks <div id=
 // 7. The Apache settings must travel with the export.
 if (!existsSync(join(outDir, '.htaccess'))) fail('web-build/.htaccess is missing (public/.htaccess was not copied)');
 
-// 8. Report the numbers the README quotes.
+// 8. Report the bundle size.
 for (const url of bundles) {
   const bytes = readFileSync(toFile(url));
   const gzipped = gzipSync(bytes, { level: 9 }).length;
