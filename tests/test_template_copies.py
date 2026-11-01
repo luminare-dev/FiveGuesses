@@ -45,21 +45,10 @@ COPIES = {
     ".yamllint.yml": "ac04d11a9f57f9e7cdea327cb4300b7f2a331090bc7c3d58096983a09168cb0d",
     ".markdownlint-cli2.jsonc": "98b4a385ce8d3213c89461ff7b211fa7cacd5d984a878730c972be24451f6c90",
     "requirements-dev.txt": "fe5ad61136adb4271c27dd90045fe19152dd0432ced703f2821132689abee8ae",
-    "docs/adr/0000-template.md": "baec9bb4c481ec3ecef0787820461cbb552e6ae2dfe7ba7f1a86b9b4fb836d49",
-    "docs/adr/0001-record-architecture-decisions.md": "f092a2c84d1bf9cd018943b83ca5e73edd3896370fca6849a51c29d10a661b8f",
-    "docs/adr/0002-pin-actions-and-downloaded-tools.md": "0e9d3e07e76d37a54840cf02e8dec6575669ee5a1f3fdc62e5e674ecd7c72967",
-    "docs/adr/0003-secret-scanning-with-the-gitleaks-binary.md": "11a1cd818d382c1ae323baf45530ad9a4abc2b3061ee41920a1b6df981bde9bd",
-    "docs/adr/0004-draft-releases-with-checksums-and-provenance.md": "5e4a1cf5e7631882b2a6de47c554e23d5fcd75fca37c623009085973798b464d",
 }
-# Adapted, not copied: .github/workflows/ci.yml (adds the "web" job), release.yml (test command and
-# archive name), reusable-release.yml (Node setup and the web build archive); see docs/adr/0005+.
-# scorecard.yml adds the "visibility" job, which reads the visibility from the API because the
-# payload of a scheduled run carries no repository; the scorecard job runs only when that job reads
-# "private": false (docs/adr/0012-logic-tests-in-jest-ui-tests-in-playwright.md). Two tests below
-# check the difference.
-# release-please-config.json is not in COPIES either: it keeps every template value and adds the
-# two "extra-files" entries that bump package.json and app.json with version.txt
-# (docs/adr/0012-logic-tests-in-jest-ui-tests-in-playwright.md); the test below checks it key by key.
+# Adapted, not copied: ci.yml (adds the "web" job), release.yml, reusable-release.yml (web build
+# archive), scorecard.yml (adds the "visibility" job) and release-please-config.json (adds
+# "extra-files"). The tests below check those differences.
 
 # sha256 of the template's .github/workflows/scorecard.yml at SOURCE_COMMIT. Our scorecard.yml,
 # with the visibility check taken out again (_scorecard_without_the_visibility_check), must hash to

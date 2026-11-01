@@ -1,13 +1,5 @@
-# Deploy: puts a published release on the Apache host. The run downloads the web archive and
-# SHA256SUMS of that release, verifies the checksum, extracts the site and syncs it with rsync over
-# SSH. It never builds anything: the files are the ones the release workflow built and checksummed.
-# Start it with the release tag once the release run has published the release (docs/runbook.md
-# step 4): Actions -> deploy -> Run workflow, or "gh workflow run deploy.yml -f tag=vX.Y.Z".
-# The release workflow publishes with GITHUB_TOKEN, and a release published that way starts no
-# workflow, so the "release" trigger fires only for a release a person publishes (for example a
-# draft published by hand on the releases page).
-# The deploy job runs only when the four repository secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY
-# and DEPLOY_PATH are set (docs/runbook.md); without them the run is skipped and stays green.
+# Deploy a published release to the Apache host (verify SHA256SUMS, extract, rsync over SSH).
+# Run by hand with the tag (docs/runbook.md); skipped unless the four DEPLOY_* secrets are set.
 name: deploy
 
 on:

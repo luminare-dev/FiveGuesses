@@ -23,7 +23,7 @@ besides its own.
 ## My daily song differs from a friend's
 
 **Cause:** the puzzle number counts days at your local midnight, so two players in different time
-zones can be on different days for a few hours (see [ADR 0007](adr/0007-the-daily-song-comes-from-the-day-number.md)).
+zones can be on different days for a few hours.
 Travelling across time zones moves your day with you, so a puzzle can come round twice or be
 skipped; a puzzle seen twice is counted in the statistics once.
 

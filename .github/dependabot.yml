@@ -1,15 +1,5 @@
-# Dependabot version updates (https://docs.github.com/en/code-security/dependabot).
-# Keeps the SHA pins of the workflow actions and their "# vX.Y.Z" comments current in the
-# workflows this repository owns, and the npm packages. A 7-day cooldown lets a bad release
-# surface before it lands here.
-# The files copied from luminare-dev/oss-template are pinned by hash in
-# tests/test_template_copies.py, so a Dependabot edit of them fails "ci / lint-test". They are left
-# out here: the four copied workflows and the adapted scorecard.yml (it uses no remote action)
-# through exclude-paths, and requirements-dev.txt (the only pip manifest) by having no pip entry.
-# The template receives the same updates; bring them over by copying the files again and moving
-# SOURCE_COMMIT and the hashes in that test. That also covers the gitleaks and actionlint downloads
-# (version + sha256 inputs in the copied reusable workflows), which Dependabot does not see. See
-# docs/adr/0012-logic-tests-in-jest-ui-tests-in-playwright.md.
+# Dependabot updates for the workflow actions and npm packages, with a 7-day cooldown.
+# Files copied from luminare-dev/oss-template are excluded (hash-pinned in tests/test_template_copies.py).
 version: 2
 updates:
   - package-ecosystem: github-actions

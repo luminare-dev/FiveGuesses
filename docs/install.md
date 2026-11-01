@@ -1,8 +1,6 @@
 # Installation
 
-The README quickstart is the short version of this page. The install, build and check commands
-below were run on a Linux machine with Node.js 22.22.0 and npm 10.9.4 on 2026-10-21; the release
-checks apply once a release exists.
+The README has the short version of this page.
 
 ## Requirements
 
