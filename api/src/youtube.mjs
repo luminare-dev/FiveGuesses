@@ -57,10 +57,11 @@ export function parseVideoTitle(title, channel = '') {
   return { artist: artist.slice(0, 200), title: song.slice(0, 200) };
 }
 
-async function ytJson(url, deps) {
+// The key goes in a header, never in a URL that could end up in a log.
+async function ytJson(url, key, deps) {
   let res;
   try {
-    res = await get(url, deps, { headers: { Referer: 'https://fiveguesses.app/' } });
+    res = await get(url, deps, { headers: { Referer: 'https://fiveguesses.app/', 'X-Goog-Api-Key': key } });
   } catch (e) {
     if (e instanceof ApiError && e.code === 'budget') throw e;
     throw new ApiError(503, 'youtube_unavailable');
@@ -85,7 +86,8 @@ async function ytJson(url, deps) {
 export async function fetchPlaylist(list, key, deps) {
   if (!key) throw new ApiError(503, 'youtube_unavailable');
   const meta = await ytJson(
-    `${API}/playlists?${new URLSearchParams({ part: 'snippet', id: list, fields: 'items(snippet/title)', key })}`,
+    `${API}/playlists?${new URLSearchParams({ part: 'snippet', id: list, fields: 'items(snippet/title)' })}`,
+    key,
     deps,
   );
   const label = meta.items?.[0]?.snippet?.title;
@@ -98,10 +100,9 @@ export async function fetchPlaylist(list, key, deps) {
       maxResults: '50',
       playlistId: list,
       fields: 'nextPageToken,items(snippet(title,videoOwnerChannelTitle))',
-      key,
     });
     if (pageToken) q.set('pageToken', pageToken);
-    const data = await ytJson(`${API}/playlistItems?${q}`, deps);
+    const data = await ytJson(`${API}/playlistItems?${q}`, key, deps);
     for (const it of data.items || []) {
       const e = parseVideoTitle(it?.snippet?.title, it?.snippet?.videoOwnerChannelTitle);
       if (e) entries.push(e);

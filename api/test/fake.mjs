@@ -5,8 +5,10 @@ export const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, impo
 
 export function fakeFetch(routes) {
   const calls = [];
+  const inits = [];
   const fetch = async (url, init) => {
     calls.push(String(url));
+    inits.push(init);
     for (const [match, res] of routes) {
       if (match(String(url))) {
         const r = typeof res === 'function' ? res(String(url), init) : res instanceof Response ? res.clone() : res;
@@ -16,6 +18,7 @@ export function fakeFetch(routes) {
     return new Response('not found', { status: 404 });
   };
   fetch.calls = calls;
+  fetch.inits = inits;
   return fetch;
 }
 

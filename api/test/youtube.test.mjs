@@ -62,6 +62,8 @@ test('reads the label and up to 4 pages', async () => {
   assert.equal(q.get('pageToken'), 't1');
   assert.equal(q.get('maxResults'), '50');
   assert.equal(q.get('playlistId'), LIST);
+  assert.ok(fetch.calls.every((u) => !u.includes(KEY) && !new URL(u).searchParams.has('key')));
+  assert.ok(fetch.inits.every((i) => i.headers['X-Goog-Api-Key'] === KEY));
 });
 
 const quota = json({ error: { code: 403, errors: [{ reason: 'quotaExceeded', domain: 'youtube.quota', message: `key ${KEY}` }] } }, 403);
