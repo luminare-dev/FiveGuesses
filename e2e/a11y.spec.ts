@@ -13,9 +13,11 @@ import {
   openStats,
   playButton,
   setup,
+  skip,
   skipButton,
   test,
 } from './fixtures';
+import { FakeRoom, ROOM_CODE, serveRoomPages, TAKE_ON_ME } from './roomServer';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 // The active-row colour: Lumen on dark, Royal on light.
@@ -363,4 +365,38 @@ test('in forced-colours mode the highlighted suggestion, the chosen theme and th
   await expect(other.locator('[aria-hidden="true"]')).toHaveText(/^✓\s*$/);
   await expect(chosen.locator('[aria-hidden="true"]')).toHaveCount(0);
   await closeSheet(page);
+});
+
+test('axe finds no serious or critical issue in the song sheet and the room', async ({ page }) => {
+  await setup(page, { colorScheme: 'light' });
+  await page.route('https://api.fiveguesses.app/api/sources', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ sources: [{ id: '80s', group: 'Decades', label: '1980s' }] }),
+    })
+  );
+  await page.goto('/');
+  await skip(page, 5);
+  await page.getByRole('button', { name: 'Choose songs' }).click();
+  await expect(page.getByRole('dialog', { name: 'Choose songs' }).getByRole('button', { name: '1980s' })).toBeVisible();
+  await audit(page, 'song sheet open');
+  await closeSheet(page);
+
+  const fake = await FakeRoom.create([TAKE_ON_ME]);
+  await serveRoomPages(page.context());
+  await fake.attach(page);
+  await page.goto(`/r/${ROOM_CODE}`);
+  await expect(page.getByRole('textbox', { name: 'Your name' })).toBeVisible();
+  await audit(page, 'room name form');
+  await page.getByRole('textbox', { name: 'Your name' }).fill('Anna');
+  await page.getByRole('button', { name: 'Join', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start the game' })).toBeVisible();
+  fake.join('Ben');
+  await expect(page.getByRole('button', { name: 'Remove Ben' })).toBeVisible();
+  await audit(page, 'room lobby, light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await audit(page, 'room lobby, dark');
 });

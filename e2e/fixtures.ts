@@ -21,7 +21,11 @@ process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
 export const ORIGIN = 'http://127.0.0.1:4173';
 export const AUDIO_HOST = 'audio-ssl.itunes.apple.com';
 export const ARTWORK_HOST = 'is1-ssl.mzstatic.com';
-export const ALLOWED_THIRD_PARTY_HOSTS: readonly string[] = [AUDIO_HOST, ARTWORK_HOST];
+export const SEARCH_HOST = 'itunes.apple.com';
+export const API_HOST = 'api.fiveguesses.app';
+export const ALLOWED_THIRD_PARTY_HOSTS: readonly string[] = [AUDIO_HOST, ARTWORK_HOST, SEARCH_HOST, API_HOST];
+// Cross-origin answers of the stubs carry this, as Apple's search and the room service do.
+export const CORS = { 'access-control-allow-origin': '*' };
 
 // 2026-10-21 10:00 Europe/Vienna: puzzle #58. Every instant is written as a UTC instant.
 export const DEFAULT_TIME = '2026-10-21T08:00:00Z';
@@ -146,7 +150,8 @@ export type RequestLog = {
   thirdPartyHosts: () => string[];
 };
 
-// Fixes the clock, the media emulation and the online state, stubs the two Apple hosts and
+// Fixes the clock, the media emulation and the online state, stubs the Apple hosts and the room
+// service (an empty search, a 503 for every API call; a test routes its own answers on top) and
 // starts the request log. Call it before the first navigation.
 export async function setup(page: Page, options: SetupOptions = {}): Promise<RequestLog> {
   const {
@@ -178,6 +183,12 @@ export async function setup(page: Page, options: SetupOptions = {}): Promise<Req
   );
   await router.route('**/*.mzstatic.com/**', (route) =>
     route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1X1 })
+  );
+  await router.route(`https://${SEARCH_HOST}/**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body: '{"resultCount":0,"results":[]}' })
+  );
+  await router.route(`https://${API_HOST}/**`, (route) =>
+    route.fulfill({ status: 503, contentType: 'application/json', headers: CORS, body: '{"error":"stubbed"}' })
   );
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));

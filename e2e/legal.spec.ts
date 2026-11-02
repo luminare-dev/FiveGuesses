@@ -7,6 +7,8 @@ const HEADINGS = [
   'Data stored in your browser',
   'Server logs',
   'Requests to Apple',
+  'Rooms and playlist import',
+  'YouTube',
   'Your rights',
 ];
 
@@ -19,7 +21,12 @@ const REQUIRED_TEXT = [
   '7 days',
   '5 weeks',
   'Datenschutzbehörde',
-  'Last updated: 21 October 2026',
+  'Last updated: 2 November 2026',
+  'YouTube API Services',
+  'https://www.youtube.com/t/terms',
+  'https://policies.google.com/privacy',
+  'api.fiveguesses.app',
+  'fg:room:',
 ];
 
 test('the legal page is static, complete and leads back to the game', async ({ page }) => {

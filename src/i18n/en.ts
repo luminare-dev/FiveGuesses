@@ -204,7 +204,7 @@ export const en = {
   'rooms.rank': '{rank}.',
   'rooms.correct': '{count} songs named',
   'rooms.correctOne': '1 song named',
-  'rooms.lastSong': 'The last song was {song}.',
+  'rooms.lastSong': 'The last song',
   'rooms.error.sourceFailed': 'The songs could not be loaded. Choose other songs or try again.',
   'rooms.error.sourceEmpty': 'No songs with a preview were found. Choose other songs.',
   'rooms.error.slowDown': 'Too many moves at once. Wait a moment.',

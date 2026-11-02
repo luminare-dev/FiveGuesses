@@ -189,7 +189,8 @@ export function RoomScreen({ code }: Props) {
   }, [setPreference, announce]);
 
   const start = () => send({ t: 'start', rounds, source: toStart(source) });
-  const guess = (song: Song) => send({ t: 'guess', round: roundNo, id: song.id, artist: song.artist, title: song.title });
+  const guess = (song: Song) =>
+    send({ t: 'guess', round: roundNo, id: song.id, artist: song.artist.slice(0, 200), title: song.title.slice(0, 200) });
   const skip = () => send({ t: 'skip', round: roundNo });
   const play = () => snippet.play(SNIPPET_SECONDS[Math.min(stage, MAX_GUESSES - 1)]);
   const join = () => {
@@ -408,10 +409,16 @@ export function RoomScreen({ code }: Props) {
           <View style={styles.card}>
             {sectionHeading(t('rooms.finishedTitle'))}
             {view.standings !== null && <Standings standings={view.standings} />}
-            {game?.answer && (
-              <Text style={styles.note}>{t('rooms.lastSong', { song: songLabel(game.answer) })}</Text>
-            )}
           </View>
+          {game?.answer && (
+            <View style={styles.card}>
+              <Text role="heading" aria-level={2} style={styles.subheading}>
+                {t('rooms.lastSong')}
+              </Text>
+              <AnswerCard song={game.answer} />
+              <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+            </View>
+          )}
           {settings}
           {backHome}
           {players}
