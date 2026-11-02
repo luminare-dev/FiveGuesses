@@ -8,6 +8,7 @@ import { lookupTracks, sampleTracks, shuffle } from './sources.mjs';
 const MAX_FRAME = 4096;
 const RATE_WINDOW = 10_000;
 const RATE_MAX = 30;
+const OPEN = 1; // WebSocket readyState
 
 const attachment = (ws) => {
   try {
@@ -120,7 +121,7 @@ export class Room extends DurableObject {
     if (!pid || !this.room) return;
     const others = this.ctx
       .getWebSockets()
-      .some((s) => s !== ws && s.readyState === WebSocket.OPEN && attachment(s).pid === pid);
+      .some((s) => s !== ws && s.readyState === OPEN && attachment(s).pid === pid);
     if (!others) await this.apply(disconnect(this.room, pid, Date.now()), null);
   }
 
@@ -183,7 +184,7 @@ export class Room extends DurableObject {
     await this.ctx.storage.setAlarm(nextAlarm(this.room, Date.now()));
     if (before && !res.seat && !res.close && !res.start && same(before, this.room)) return;
     for (const s of this.ctx.getWebSockets()) {
-      if (s.readyState !== WebSocket.OPEN) continue;
+      if (s.readyState !== OPEN) continue;
       send(s, { t: 'room', room: view(this.room, attachment(s).pid) });
     }
   }
