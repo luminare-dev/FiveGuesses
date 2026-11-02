@@ -135,6 +135,8 @@ test('a removed player sees why and does not come back', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Back to the daily game' })).toHaveAttribute('href', '/');
   await page.clock.runFor(15_000);
   expect(fake.received.length).toBe(sent);
+  // The token stays, so a reload is refused by the room instead of asking for a new name.
+  expect(await page.evaluate((key) => sessionStorage.getItem(key), `fg:room:${ROOM_CODE}`)).toMatch(TOKEN);
 });
 
 test('an unknown room says so', async ({ page }) => {

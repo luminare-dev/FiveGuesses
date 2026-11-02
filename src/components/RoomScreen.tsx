@@ -35,6 +35,9 @@ import { SourceSheet } from './SourceSheet';
 type Props = { code: string };
 type SheetName = 'about' | 'sources' | null;
 
+// The room lets anyone skip a host who has not moved for 60 s of a round.
+const HOST_IDLE_MS = 61_000;
+
 function closedMessage(reason: ClosedReason): string {
   switch (reason) {
     case 'not_found':
@@ -118,6 +121,20 @@ export function RoomScreen({ code }: Props) {
   const myStatus = me?.status ?? null;
   const roundNo = game?.round ?? 0;
 
+  // Counted from the host's last move this client saw, so never earlier than the room's clock.
+  const hostRow = view?.players.find((p) => p.host) ?? null;
+  const hostMark =
+    phase === 'playing' && hostRow !== null && hostRow.status === 'playing'
+      ? `${roundNo}:${hostRow.id}:${hostRow.misses}`
+      : null;
+  const [idleMark, setIdleMark] = useState<string | null>(null);
+  useEffect(() => {
+    if (hostMark === null || isHost) return undefined;
+    const timer = setTimeout(() => setIdleMark(hostMark), HOST_IDLE_MS);
+    return () => clearTimeout(timer);
+  }, [hostMark, isHost]);
+  const hostIdle = !isHost && hostMark !== null && idleMark === hostMark;
+
   // A new round or the end of my turn stops a snippet that is still playing.
   useEffect(() => {
     stop();
@@ -151,7 +168,7 @@ export function RoomScreen({ code }: Props) {
       const last = me.entries[me.entries.length - 1];
       const seconds = SNIPPET_SECONDS[Math.min(me.stage, MAX_GUESSES - 1)];
       if (me.status === 'won') announce(t('rooms.live.solved'));
-      else if (me.status === 'lost' && game?.answer) announce(t('live.lost', { song: songLabel(game.answer) }));
+      else if (me.status === 'lost') announce(t('reveal.lost'));
       else if (last?.kind === 'partial') announce(t('live.partial', { seconds }));
       else if (last?.kind === 'skip') announce(t('live.skipped', { seconds }));
       else announce(t('live.wrong', { seconds }));
@@ -211,7 +228,9 @@ export function RoomScreen({ code }: Props) {
         ? t('rooms.nameTaken')
         : lastError.code === 'name_invalid'
           ? t('rooms.nameInvalid')
-          : null
+          : lastError.code === 'room_full'
+            ? t('rooms.roomFull')
+            : null
       : null;
 
   const sectionHeading = (label: string) => (
@@ -274,6 +293,7 @@ export function RoomScreen({ code }: Props) {
           you={you}
           isHost={isHost}
           playing={phase === 'playing'}
+          hostIdle={hostIdle}
           onSkipPlayer={(player) => send({ t: 'skipPlayer', player })}
           onKick={(player) => send({ t: 'kick', player })}
         />
@@ -360,7 +380,9 @@ export function RoomScreen({ code }: Props) {
                     : myStatus === 'waiting' || myStatus === null
                       ? t('rooms.youWait')
                       : myStatus === 'skipped'
-                        ? t('rooms.youSkipped')
+                        ? isHost
+                          ? t('rooms.youSkippedIdle')
+                          : t('rooms.youSkipped')
                         : t('reveal.lost')}
               </Text>
               {entries.length > 0 && <Board entries={entries} activeIndex={null} />}
@@ -390,7 +412,9 @@ export function RoomScreen({ code }: Props) {
             <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
           </View>
           {game.results !== null && <RoundResults results={game.results} players={view.players} />}
-          <Text style={styles.note}>{t('rooms.nextSoon')}</Text>
+          <Text style={styles.note}>
+            {game.revealUntil !== null ? t('rooms.nextSoon') : t('rooms.waitingForSitIn')}
+          </Text>
           <View style={styles.row}>
             {sitOut}
             {isHost && (

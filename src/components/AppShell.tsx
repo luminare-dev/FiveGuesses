@@ -75,11 +75,17 @@ function GameScreen() {
   const closeSheet = useCallback(() => setSheet(null), []);
   const chooseButton = useRef<View>(null);
   const openSources = useCallback(() => setSheet('sources'), []);
+  const openRoomAnnounced = useCallback(
+    () =>
+      openNewRoom().then((ok) => {
+        if (!ok) announce(t('rooms.createFailed'));
+        return ok;
+      }),
+    [announce]
+  );
   const playWithFriends = useCallback(() => {
-    void openNewRoom().then((ok) => {
-      if (!ok) announce(t('rooms.createFailed'));
-    });
-  }, [announce]);
+    void openRoomAnnounced();
+  }, [openRoomAnnounced]);
 
   // A round that ends removes the guess box, and a round that starts removes the result card,
   // so the control that had focus is gone. Focus then moves to the result heading or to the play
@@ -157,7 +163,7 @@ function GameScreen() {
                   onFreePlay={game.startFreePlay}
                   onBackToDaily={game.backToDaily}
                   onChooseSongs={openSources}
-                  onPlayWithFriends={openNewRoom}
+                  onPlayWithFriends={openRoomAnnounced}
                   chooseButtonRef={chooseButton}
                   headingRef={revealHeading}
                 />

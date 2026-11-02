@@ -54,7 +54,8 @@ export function useRoom(code: string): RoomConnection {
   const stop = useCallback(
     (reason: ClosedReason) => {
       stopped.current = true;
-      if (reason === 'left' || reason === 'kicked') forgetToken(code);
+      // A kicked tab keeps its token, so a reload is refused too.
+      if (reason === 'left') forgetToken(code);
       setClosed(reason);
       setConnection('closed');
     },
@@ -110,7 +111,7 @@ export function useRoom(code: string): RoomConnection {
         case 'error':
           if (message.code === 'kicked') final = 'kicked';
           else if (message.code === 'not_found') final = 'not_found';
-          else if (message.code === 'name_taken' || message.code === 'name_invalid') {
+          else if (message.code === 'name_taken' || message.code === 'name_invalid' || message.code === 'room_full') {
             name.current = null;
             setConnection('need_name');
           }

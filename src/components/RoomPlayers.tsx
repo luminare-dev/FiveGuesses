@@ -14,6 +14,8 @@ type Props = {
   // The host gets Skip turn (during a round) and Remove beside every other player.
   isHost: boolean;
   playing: boolean;
+  // The host has not moved for a minute: everyone gets Skip turn beside the host.
+  hostIdle: boolean;
   onSkipPlayer: (id: string) => void;
   onKick: (id: string) => void;
 };
@@ -31,7 +33,7 @@ export function playerStatus(player: PlayerView): string {
     case 'lost':
       return t('rooms.status.lost');
     case 'skipped':
-      return t('rooms.status.skipped');
+      return player.host ? t('rooms.status.skippedIdle') : t('rooms.status.skipped');
     case 'out':
       return t('rooms.status.out');
     case 'waiting':
@@ -43,7 +45,7 @@ export function playerStatus(player: PlayerView): string {
 
 // Everyone in the room in join order, with the host badge, the connection, the round status,
 // the misses and the points.
-export function RoomPlayers({ players, you, isHost, playing, onSkipPlayer, onKick }: Props) {
+export function RoomPlayers({ players, you, isHost, playing, hostIdle, onSkipPlayer, onKick }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   return (
@@ -55,6 +57,7 @@ export function RoomPlayers({ players, you, isHost, playing, onSkipPlayer, onKic
           self ? t('rooms.youBadge') : null,
           player.connected ? null : t('rooms.away'),
         ].filter((tag): tag is string => tag !== null);
+        const skippable = !self && playing && player.status === 'playing' && (isHost || (hostIdle && player.host));
         return (
           <View key={player.id} role="listitem" style={[styles.row, self && styles.rowSelf]}>
             <View style={styles.info}>
@@ -66,9 +69,9 @@ export function RoomPlayers({ players, you, isHost, playing, onSkipPlayer, onKic
                 {`${playerStatus(player)} · ${t('rooms.points', { points: player.total })}`}
               </Text>
             </View>
-            {isHost && !self && (
+            {!self && (isHost || skippable) && (
               <View style={styles.actions}>
-                {playing && player.status === 'playing' && (
+                {skippable && (
                   <Button
                     variant="secondary"
                     label={t('rooms.skipTurn')}
@@ -76,12 +79,14 @@ export function RoomPlayers({ players, you, isHost, playing, onSkipPlayer, onKic
                     onPress={() => onSkipPlayer(player.id)}
                   />
                 )}
-                <Button
-                  variant="secondary"
-                  label={t('rooms.remove')}
-                  aria-label={t('rooms.removePlayer', { name: player.name })}
-                  onPress={() => onKick(player.id)}
-                />
+                {isHost && (
+                  <Button
+                    variant="secondary"
+                    label={t('rooms.remove')}
+                    aria-label={t('rooms.removePlayer', { name: player.name })}
+                    onPress={() => onKick(player.id)}
+                  />
+                )}
               </View>
             )}
           </View>
