@@ -1,6 +1,6 @@
 # Caller: lint, tests and the full-history secret scan on every pull request and push to main.
 # Required checks for the main ruleset: "ci / lint-test" and "secrets / gitleaks".
-# From luminare-dev/oss-template; the "web" job (type check, unit tests, web build, e2e) is this repository's own.
+# From luminare-dev/oss-template; the "web" and "api" jobs are this repository's own.
 name: ci
 
 on:
@@ -69,3 +69,23 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  api:
+    name: api
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (version from .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Worker unit tests
+        run: node --test 'api/test/*.test.mjs'
