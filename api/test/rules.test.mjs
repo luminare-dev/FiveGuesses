@@ -5,7 +5,9 @@ import {
   DISCONNECT_GRACE,
   EMPTY_TTL,
   FINISHED_TTL,
+  HOST_IDLE,
   IDLE_TTL,
+  MAX_SEATS,
   PLACE_BONUS,
   REVEAL_MS,
   SEAT_TTL,
@@ -14,6 +16,7 @@ import {
   disconnect,
   handle,
   nextAlarm,
+  roomMessages,
   roundPoints,
   standings,
   startFailed,
@@ -121,6 +124,19 @@ test('names: trimmed, 20 code points, case-insensitive duplicates', () => {
   assert.equal(send(ctx.room, b, { t: 'hello', token: tok('b'), name: '😀'.repeat(20) }).seat !== undefined, true);
 });
 
+test('names: look-alikes are taken, mixed alphabets are refused', () => {
+  const ctx = setup(['Paul', 'Pic']);
+  const hi = (name) => send(ctx.room, { pid: null }, { t: 'hello', token: tok('z'), name }).reply?.code;
+  assert.equal(hi('P\u0430ul'), 'name_invalid', 'Cyrillic a in a Latin name');
+  assert.equal(hi('Ｐａｕｌ'), 'name_taken', 'fullwidth');
+  assert.equal(hi('𝐏𝐚𝐮𝐥'), 'name_taken', 'math bold');
+  assert.equal(hi('Páùl'), 'name_taken', 'accents');
+  assert.equal(hi('\u0440ic'), 'name_invalid');
+  assert.equal(hi('\u0420\u0406\u0421'), 'name_taken', 'Cyrillic only, looks like Pic');
+  assert.equal(hi('\u03a0aul'), 'name_invalid', 'Greek and Latin');
+  assert.equal(hi('Pul'), undefined, 'a different name still joins');
+});
+
 test('host is the first seat and moves on leave, kick and after 30 s away', () => {
   let ctx = setup(['Anna', 'Ben', 'Cara']);
   assert.ok(host(ctx, 'Anna'));
@@ -135,6 +151,8 @@ test('host is the first seat and moves on leave, kick and after 30 s away', () =
   assert.equal(ctx.room.players[ctx.s.Ben.pid], undefined);
   const back = send(ctx.room, { pid: null }, { t: 'hello', token: ctx.s.Ben.token, name: 'Ben' });
   assert.deepEqual([back.reply, back.closeSelf], [{ t: 'error', code: 'kicked' }, 4001]);
+  const newTab = send(ctx.room, { pid: null }, { t: 'hello', token: tok('n'), name: 'BEN' });
+  assert.deepEqual([newTab.reply, newTab.seat], [{ t: 'error', code: 'name_taken' }, undefined]);
 
   ctx = setup(['Anna', 'Ben']);
   ctx.room = disconnect(ctx.room, ctx.s.Anna.pid, T0).room;
@@ -146,6 +164,19 @@ test('host is the first seat and moves on leave, kick and after 30 s away', () =
   const resumed = send(ctx.room, { pid: null }, { t: 'hello', token: ctx.s.Anna.token }, T0 + DISCONNECT_GRACE + 1);
   assert.equal(resumed.seat, ctx.s.Anna.pid);
   assert.equal(resumed.room.hostId, ctx.s.Ben.pid);
+});
+
+test('a room takes MAX_SEATS seats', () => {
+  let room = createRoom('ABC234', T0);
+  for (let i = 0; i < MAX_SEATS; i++) {
+    const res = send(room, { pid: null }, { t: 'hello', token: `t${String(i).padStart(21, '0')}`, name: `P${i}` });
+    assert.ok(res.seat, `seat ${i}`);
+    room = res.room;
+  }
+  const full = send(room, { pid: null }, { t: 'hello', token: tok('z'), name: 'Late' });
+  assert.deepEqual([full.reply, full.seat], [{ t: 'error', code: 'room_full' }, undefined]);
+  const back = send(room, { pid: null }, { t: 'hello', token: `t${'0'.repeat(21)}` });
+  assert.ok(back.seat, 'a seated token still comes back');
 });
 
 test('round start: sitters-out are out, late joiners wait', () => {
@@ -281,8 +312,28 @@ test('reveal moves on by itself only with an active player', () => {
   ctx.room = tick(ctx.room, T0 + 2 * REVEAL_MS).room;
   assert.equal(ctx.room.phase, 'reveal');
   assert.equal(ctx.room.game.revealUntil, null);
-  as(ctx, 'Anna', { t: 'next' }, T0 + 2 * REVEAL_MS);
+  assert.equal(as(ctx, 'Anna', { t: 'next' }, T0 + 2 * REVEAL_MS).reply.code, 'bad_request');
+  assert.equal(ctx.room.game.round, 2, 'no round burnt');
+  as(ctx, 'Ben', { t: 'sitOut', on: false }, T0 + 3 * REVEAL_MS);
+  assert.equal(ctx.room.game.revealUntil, T0 + 4 * REVEAL_MS, 'the timer runs again');
+  assert.equal(nextAlarm(ctx.room, T0 + 3 * REVEAL_MS), T0 + 4 * REVEAL_MS);
+  ctx.room = tick(ctx.room, T0 + 4 * REVEAL_MS).room;
+  assert.equal(ctx.room.phase, 'playing');
   assert.equal(ctx.room.game.round, 3);
+});
+
+test('anyone may skip a host who has not moved for a minute', () => {
+  const ctx = startGame(setup(['Anna', 'Ben', 'Cara']), 3);
+  const skipHost = (now) => as(ctx, 'Ben', { t: 'skipPlayer', player: ctx.s.Anna.pid }, now);
+  assert.equal(skipHost(T0 + HOST_IDLE - 1).reply.code, 'not_host');
+  skip(ctx, 'Anna', 1, T0 + HOST_IDLE - 1);
+  assert.equal(skipHost(T0 + HOST_IDLE).reply.code, 'not_host', 'the host just moved');
+  assert.equal(as(ctx, 'Ben', { t: 'skipPlayer', player: ctx.s.Cara.pid }, T0 + 3 * HOST_IDLE).reply.code, 'not_host');
+  assert.equal(skipHost(T0 + 2 * HOST_IDLE - 1).reply, undefined);
+  assert.equal(board(ctx, 'Anna').status, 'skipped');
+  right(ctx, 'Ben');
+  right(ctx, 'Cara');
+  assert.equal(ctx.room.phase, 'reveal');
 });
 
 test('last round finishes with standings; play again resets totals', () => {
@@ -311,6 +362,46 @@ test('views never leak tokens, the kicked list or other tracks; the answer waits
   json = JSON.stringify(view(ctx.room, null));
   assert.ok(!json.includes(a.title));
   assert.equal(view(ctx.room, null).you, null);
+});
+
+test('the answer waits for the end of the round unless you named it', () => {
+  const ctx = startGame(setup(['Anna', 'Ben', 'Cara', 'Dan', 'Eva']), 3);
+  const late = send(ctx.room, { pid: null }, { t: 'hello', token: tok('x'), name: 'Spy' });
+  ctx.room = late.room;
+  ctx.s.Spy = { pid: late.seat, token: tok('x') };
+  as(ctx, 'Ben', { t: 'sitOut', on: true });
+  skip(ctx, 'Cara', 5);
+  as(ctx, 'Anna', { t: 'skipPlayer', player: ctx.s.Dan.pid });
+  const status = (n) => view(ctx.room, ctx.s[n].pid).game.me.status;
+  assert.deepEqual(['Spy', 'Ben', 'Cara', 'Dan'].map(status), ['waiting', 'out', 'lost', 'skipped']);
+  assert.equal(ctx.room.phase, 'playing');
+  for (const n of ['Spy', 'Ben', 'Cara', 'Dan', 'Eva']) {
+    const v = view(ctx.room, ctx.s[n].pid);
+    assert.equal(v.game.answer, null, n);
+    assert.ok(!JSON.stringify(v).includes(answer(ctx.room).title), n);
+  }
+  right(ctx, 'Eva');
+  assert.equal(view(ctx.room, ctx.s.Eva.pid).game.answer.title, answer(ctx.room).title);
+  right(ctx, 'Anna');
+  assert.equal(ctx.room.phase, 'reveal');
+  assert.equal(view(ctx.room, ctx.s.Spy.pid).game.answer.id, answer(ctx.room).id);
+});
+
+test('roomMessages is the view of each socket', () => {
+  const ctx = startGame(setup(['Anna', 'Ben']), 2);
+  right(ctx, 'Anna');
+  const check = (room = ctx.room) => {
+    const msg = roomMessages(room);
+    for (const pid of [ctx.s.Anna.pid, ctx.s.Ben.pid, null]) {
+      assert.deepEqual(JSON.parse(msg(pid)), { t: 'room', room: view(room, pid) });
+    }
+  };
+  check();
+  right(ctx, 'Ben');
+  check();
+  as(ctx, 'Anna', { t: 'endGame' });
+  check();
+  check(createRoom('ABC234', T0));
 });
 
 test('seats: kept within 5 minutes, removed after', () => {

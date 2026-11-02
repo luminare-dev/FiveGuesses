@@ -2,19 +2,20 @@
 // The rules live in rules.mjs; this file only does I/O. No setTimeout (hibernation).
 import { DurableObject } from 'cloudflare:workers';
 import { budget } from './apple.mjs';
-import { beginGame, createRoom, disconnect, handle, nextAlarm, startFailed, tick, view } from './rules.mjs';
+import { MAX_SEATS, beginGame, createRoom, disconnect, handle, nextAlarm, roomMessages, startFailed, tick } from './rules.mjs';
 import { lookupTracks, sampleTracks, shuffle } from './sources.mjs';
 
 const MAX_FRAME = 4096;
 const RATE_WINDOW = 10_000;
 const RATE_MAX = 30;
 const OPEN = 1; // WebSocket readyState
+const UNSEATED_MS = 5 * 60_000; // a socket without a seat is closed after this
 
 const attachment = (ws) => {
   try {
-    return ws.deserializeAttachment() || { pid: null, w: 0, n: 0 };
+    return ws.deserializeAttachment() || { pid: null, w: 0, n: 0, at: 0 };
   } catch {
-    return { pid: null, w: 0, n: 0 };
+    return { pid: null, w: 0, n: 0, at: 0 };
   }
 };
 
@@ -61,13 +62,18 @@ export class Room extends DurableObject {
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       return new Response(null, { status: 426 });
     }
+    if (this.ctx.getWebSockets().length >= 2 * MAX_SEATS) return new Response(null, { status: 503 });
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ pid: null, w: 0, n: 0 });
+    const now = Date.now();
+    server.serializeAttachment({ pid: null, w: 0, n: 0, at: now });
     if (!this.room) {
       send(server, { t: 'error', code: 'not_found' });
       close(server, 4404, 'not found');
+    } else {
+      const due = await this.ctx.storage.getAlarm();
+      if (due == null || due > now + UNSEATED_MS) await this.ctx.storage.setAlarm(now + UNSEATED_MS);
     }
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -105,7 +111,22 @@ export class Room extends DurableObject {
   }
 
   async alarm() {
-    await this.apply(tick(this.room, Date.now()), null);
+    const now = Date.now();
+    for (const s of this.ctx.getWebSockets()) {
+      const a = attachment(s);
+      if (!a.pid && now - a.at >= UNSEATED_MS) close(s, 4008, 'no seat');
+    }
+    await this.apply(tick(this.room, now), null);
+  }
+
+  // The room's next deadline, or the time the oldest socket without a seat runs out.
+  nextAlarm(now) {
+    let t = nextAlarm(this.room, now);
+    for (const s of this.ctx.getWebSockets()) {
+      const a = attachment(s);
+      if (!a.pid && s.readyState === OPEN) t = Math.min(t, Math.max(a.at + UNSEATED_MS, now + 1));
+    }
+    return t;
   }
 
   newId() {
@@ -181,11 +202,16 @@ export class Room extends DurableObject {
     this.room = res.room;
     if (!this.room) return;
     await this.ctx.storage.put('room', this.room);
-    await this.ctx.storage.setAlarm(nextAlarm(this.room, Date.now()));
+    await this.ctx.storage.setAlarm(this.nextAlarm(Date.now()));
     if (before && !res.seat && !res.close && !res.start && same(before, this.room)) return;
+    const message = roomMessages(this.room);
+    let watcher = null;
     for (const s of this.ctx.getWebSockets()) {
       if (s.readyState !== OPEN) continue;
-      send(s, { t: 'room', room: view(this.room, attachment(s).pid) });
+      const { pid } = attachment(s);
+      try {
+        s.send(pid ? message(pid) : (watcher ??= message(null)));
+      } catch {}
     }
   }
 }

@@ -15,6 +15,10 @@ export const IDLE_TTL = 15 * 60_000;
 export const EMPTY_TTL = 5 * 60_000;
 export const FINISHED_TTL = 10 * 60_000;
 export const START_TIMEOUT = 30_000;
+// Anyone may skip a host who has not moved for this long in a round.
+export const HOST_IDLE = 60_000;
+// One storage value holds the room (2 MB at most), so seats need a cap.
+export const MAX_SEATS = 200;
 const KICKED_CAP = 200;
 
 const TOKEN = /^[A-Za-z0-9_-]{22}$/;
@@ -52,7 +56,8 @@ const isStr = (s, min, max) => typeof s === 'string' && s.length >= min && s.len
 const away = (p, now) => !p.connected && p.awaySince != null && now - p.awaySince >= DISCONNECT_GRACE;
 const active = (room) => seats(room).some((p) => p.connected && !p.sittingOut);
 
-// NFC, no control characters, trimmed, single spaces, 1..20 code points.
+// NFC, no control characters, trimmed, single spaces, 1..20 code points, no Latin mixed with
+// Cyrillic or Greek (look-alikes).
 export function cleanName(name) {
   if (typeof name !== 'string') return null;
   const s = name
@@ -60,17 +65,22 @@ export function cleanName(name) {
     .replace(/[\p{Cc}\p{Cf}]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+  if (/\p{Script=Latin}/u.test(s) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(s)) return null;
   const n = [...s].length;
   return n >= 1 && n <= 20 ? s : null;
 }
 
+const LOOKALIKE = { а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ο: 'o', α: 'a' };
+
+// Compatibility folding (fullwidth, math letters), no accents, Cyrillic/Greek look-alikes as Latin.
 export function nameKey(name) {
   const k = name
+    .normalize('NFKD')
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}/gu, '')
     .replace(/['‘’ʼ`´.]/g, '')
-    .replace(/[^a-z0-9]/g, '');
+    .replace(/[аеорсухіοα]/g, (c) => LOOKALIKE[c])
+    .replace(/[^\p{L}\p{N}]/gu, '');
   return k || name.toLowerCase();
 }
 
@@ -87,14 +97,14 @@ function ensureHost(r, now) {
   else if (away(host, now) && firstConnected) r.hostId = firstConnected.id;
 }
 
-function startRound(r) {
+function startRound(r, now) {
   const g = r.game;
   g.round += 1;
   g.solved = 0;
   g.revealUntil = null;
   g.board = {};
   for (const p of seats(r)) {
-    g.board[p.id] = { status: p.sittingOut ? 'out' : 'playing', entries: [], seconds: null, place: null, points: 0 };
+    g.board[p.id] = { status: p.sittingOut ? 'out' : 'playing', entries: [], seconds: null, place: null, points: 0, lastAt: now };
   }
   r.phase = 'playing';
 }
@@ -136,6 +146,8 @@ function settle(res, now) {
   else if (r.emptySince == null) r.emptySince = now;
   ensureHost(r, now);
   checkRoundEnd(r, now);
+  // A reveal that stopped because nobody was playing goes on once someone is back.
+  if (r.phase === 'reveal' && r.game.revealUntil == null && active(r)) r.game.revealUntil = now + REVEAL_MS;
   return res;
 }
 
@@ -146,7 +158,7 @@ function removeSeat(r, id) {
 function hello(r, sock, msg, now, newId) {
   if (sock.pid && r.players[sock.pid]) return { room: r };
   if (!TOKEN.test(msg.token ?? '')) return { room: r, reply: err('bad_request') };
-  if (r.kicked.includes(msg.token)) return { room: r, reply: err('kicked'), closeSelf: 4001 };
+  if (r.kicked.some((k) => k.token === msg.token)) return { room: r, reply: err('kicked'), closeSelf: 4001 };
   const seat = Object.values(r.players).find((p) => p.token === msg.token);
   if (seat) {
     const close = seat.connected ? [{ id: seat.id, code: 4002 }] : [];
@@ -158,7 +170,10 @@ function hello(r, sock, msg, now, newId) {
   const name = cleanName(msg.name);
   if (!name) return { room: r, reply: err('name_invalid') };
   const key = nameKey(name);
-  if (Object.values(r.players).some((p) => p.key === key)) return { room: r, reply: err('name_taken') };
+  if (Object.values(r.players).some((p) => p.key === key) || r.kicked.some((k) => k.key === key)) {
+    return { room: r, reply: err('name_taken') };
+  }
+  if (Object.keys(r.players).length >= MAX_SEATS) return { room: r, reply: err('room_full') };
   const id = newId();
   r.seq += 1;
   r.players[id] = {
@@ -175,7 +190,7 @@ function hello(r, sock, msg, now, newId) {
     secondsSum: 0,
   };
   if (r.game && (r.phase === 'playing' || r.phase === 'reveal')) {
-    r.game.board[id] = { status: 'waiting', entries: [], seconds: null, place: null, points: 0 };
+    r.game.board[id] = { status: 'waiting', entries: [], seconds: null, place: null, points: 0, lastAt: now };
   }
   return { room: r, seat: id };
 }
@@ -206,11 +221,12 @@ function answerText(guess) {
   return text.slice(0, 200);
 }
 
-function play(r, pid, msg) {
+function play(r, pid, msg, now) {
   const g = r.game;
   if (r.phase !== 'playing' || msg.round !== g.round) return { room: r };
   const b = g.board[pid];
   if (!b || b.status !== 'playing') return { room: r };
+  b.lastAt = now;
   const answer = g.tracks[g.round - 1];
   if (msg.t === 'skip') {
     b.entries.push({ kind: 'skip' });
@@ -248,7 +264,7 @@ function hostAction(r, msg, now) {
     case 'kick':
       if (!target || target.id === r.hostId) return { room: r };
       removeSeat(r, target.id);
-      r.kicked.push(target.token);
+      r.kicked.push({ token: target.token, key: target.key });
       if (r.kicked.length > KICKED_CAP) r.kicked.splice(0, r.kicked.length - KICKED_CAP);
       return { room: r, close: [{ id: target.id, code: 4001 }] };
     case 'skipPlayer': {
@@ -268,11 +284,20 @@ function hostAction(r, msg, now) {
       }
       return { room: r };
     case 'next':
-      if (r.phase === 'reveal') startRound(r);
+      if (r.phase !== 'reveal') return { room: r };
+      if (!active(r)) return { room: r, reply: err('bad_request') };
+      startRound(r, now);
       return { room: r };
     default:
       return start(r, msg, now);
   }
+}
+
+// skipPlayer on the host from anyone else: allowed once the host has not moved for HOST_IDLE.
+function idleHost(r, msg, now) {
+  if (msg.t !== 'skipPlayer' || msg.player !== r.hostId || r.phase !== 'playing') return false;
+  const b = r.game.board[r.hostId];
+  return Boolean(b && b.status === 'playing' && now - (b.lastAt ?? 0) >= HOST_IDLE);
 }
 
 // One client message. sock = { pid } (null before a seated hello). newId() makes a player id.
@@ -285,14 +310,14 @@ export function handle(room, sock, msg, now, newId) {
   const pid = sock.pid && r.players[sock.pid] ? sock.pid : null;
   if (!pid) return { room: r, reply: err('hello_first') };
   if (!KNOWN.has(msg.t)) return { room: r, reply: err('bad_request') };
-  if (HOST_ONLY.has(msg.t) && pid !== r.hostId) return { room: r, reply: err('not_host') };
+  if (HOST_ONLY.has(msg.t) && pid !== r.hostId && !idleHost(r, msg, now)) return { room: r, reply: err('not_host') };
   switch (msg.t) {
     case 'guess':
       if (!validGuess(msg)) return { room: r, reply: err('bad_request') };
-      return settle(play(r, pid, msg), now);
+      return settle(play(r, pid, msg, now), now);
     case 'skip':
       if (!isInt(msg.round, 1, MAX_ROUNDS)) return { room: r, reply: err('bad_request') };
-      return settle(play(r, pid, msg), now);
+      return settle(play(r, pid, msg, now), now);
     case 'sitOut': {
       if (typeof msg.on !== 'boolean') return { room: r, reply: err('bad_request') };
       const p = r.players[pid];
@@ -335,7 +360,7 @@ export function beginGame(room, { label, tracks, rounds }, now) {
   r.game = { rounds: n, label, tracks: tracks.slice(0, n), round: 0, revealUntil: null, solved: 0, board: {} };
   r.finishedAt = null;
   r.pendingStart = null;
-  startRound(r);
+  startRound(r, now);
   return settle({ room: r }, now);
 }
 
@@ -369,7 +394,7 @@ export function tick(room, now) {
   }
   settle({ room: r }, now);
   if (r.phase === 'reveal' && r.game.revealUntil != null && now >= r.game.revealUntil) {
-    if (active(r)) startRound(r);
+    if (active(r)) startRound(r, now);
     else r.game.revealUntil = null;
     settle({ room: r }, now);
   }
@@ -406,11 +431,11 @@ export function standings(room) {
   });
 }
 
-// What one socket sees. Never tokens, the kicked list, other rounds' tracks or a hidden answer.
-export function view(room, pid) {
-  const you = pid && room.players[pid] ? pid : null;
+// The parts of the view that are the same for every socket.
+function shared(room) {
   const g = room.game;
-  const live = g && room.phase !== 'lobby' && room.phase !== 'starting';
+  const live = Boolean(g) && room.phase !== 'lobby' && room.phase !== 'starting';
+  const over = room.phase === 'reveal' || room.phase === 'finished';
   const players = seats(room).map((p) => {
     const b = live ? g.board[p.id] : null;
     return {
@@ -424,36 +449,57 @@ export function view(room, pid) {
       misses: missesOf(b),
     };
   });
+  const results =
+    live && over
+      ? seats(room)
+          .filter((p) => g.board[p.id])
+          .map((p) => {
+            const x = g.board[p.id];
+            return { id: p.id, status: x.status, seconds: x.seconds, place: x.place, points: x.points };
+          })
+      : null;
+  return { live, over, players, results, standings: room.phase === 'finished' ? standings(room) : null };
+}
+
+// The rest: the answer only after the round or to a seat that named it, never to one that only
+// watches (waiting, sitting out, skipped, out of guesses).
+function own(room, pid, sh) {
+  const you = pid && room.players[pid] ? pid : null;
+  const g = room.game;
   let game = null;
-  if (live) {
+  if (sh.live) {
     const track = g.tracks[g.round - 1] ?? null;
     const b = you ? g.board[you] : null;
-    const over = room.phase === 'reveal' || room.phase === 'finished';
     game = {
       rounds: g.rounds,
       label: g.label,
       round: g.round,
       previewUrl: track ? track.previewUrl : null,
       revealUntil: g.revealUntil,
-      answer: over || (b && b.status !== 'playing') ? track : null,
+      answer: sh.over || (b && b.status === 'won') ? track : null,
       me: b ? { status: b.status, entries: b.entries, stage: Math.min(missesOf(b), MAX_GUESSES - 1) } : null,
-      results: over
-        ? seats(room)
-            .filter((p) => g.board[p.id])
-            .map((p) => {
-              const x = g.board[p.id];
-              return { id: p.id, status: x.status, seconds: x.seconds, place: x.place, points: x.points };
-            })
-        : null,
     };
   }
-  return {
-    code: room.code,
-    phase: room.phase,
-    you,
-    hostId: room.hostId,
-    players,
-    game,
-    standings: room.phase === 'finished' ? standings(room) : null,
+  return { code: room.code, phase: room.phase, you, hostId: room.hostId, game };
+}
+
+// What one socket sees. Never tokens, the kicked list, other rounds' tracks or a hidden answer.
+export function view(room, pid) {
+  const sh = shared(room);
+  const v = own(room, pid, sh);
+  if (v.game) v.game.results = sh.results;
+  return { ...v, players: sh.players, standings: sh.standings };
+}
+
+// pid -> the 'room' message as JSON; the shared parts are serialized once for all sockets.
+export function roomMessages(room) {
+  const sh = shared(room);
+  const players = JSON.stringify(sh.players);
+  const results = JSON.stringify(sh.results);
+  const standing = JSON.stringify(sh.standings);
+  return (pid) => {
+    const { game, ...v } = own(room, pid, sh);
+    const g = game ? `${JSON.stringify(game).slice(0, -1)},"results":${results}}` : 'null';
+    return `{"t":"room","room":{${JSON.stringify(v).slice(1, -1)},"players":${players},"game":${g},"standings":${standing}}}`;
   };
 }
