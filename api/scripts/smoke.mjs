@@ -1,5 +1,7 @@
 // Smoke test of the live API (Node 22: global fetch and WebSocket, no dependencies).
 // node api/scripts/smoke.mjs [--base https://api.fiveguesses.app] [--youtube <playlist url>] [--expire]
+// The Worker never calls itunes.apple.com; this script plays the browser's part (the iTunes lookup
+// of a category's ids) and sends the room the host's songs, as the app does.
 import { randomBytes } from 'node:crypto';
 
 const arg = (name, def) => {
@@ -27,7 +29,34 @@ async function api(path, init = {}) {
   return { status: res.status, body };
 }
 
-const audio = (t) => typeof t.previewUrl === 'string' && t.previewUrl.startsWith('https://audio-ssl.itunes.apple.com/');
+const AUDIO = 'https://audio-ssl.itunes.apple.com/';
+const audio = (t) => typeof t.previewUrl === 'string' && t.previewUrl.startsWith(AUDIO);
+
+// The browser's part: category entries -> tracks with previews, one iTunes lookup per country.
+async function lookupTracks(entries) {
+  const byCountry = new Map();
+  for (const e of entries) byCountry.set(e.country, [...(byCountry.get(e.country) ?? []), e]);
+  const tracks = [];
+  for (const [country, list] of byCountry) {
+    const q = new URLSearchParams({ id: list.map((e) => e.id).join(','), country });
+    const res = await fetch(`https://itunes.apple.com/lookup?${q}`);
+    if (!res.ok) throw new Error(`iTunes lookup ${res.status}`);
+    const found = new Map(JSON.parse(await res.text()).results.map((r) => [r.trackId, r]));
+    for (const e of list) {
+      const r = found.get(e.id);
+      if (!r || !audio(r)) continue;
+      const art = /^https:\/\/[^/]+\.mzstatic\.com\//.test(r.artworkUrl100 ?? '') ? r.artworkUrl100.replace('100x100bb', '512x512bb') : '';
+      const link = (r.trackViewUrl ?? '').startsWith('https://music.apple.com/') ? r.trackViewUrl : null;
+      tracks.push({ id: e.id, artist: e.artist, title: e.title, year: null, matchedTrack: r.trackName, matchedArtist: r.artistName, previewUrl: r.previewUrl, artworkUrl: art, appleMusicUrl: link, country });
+    }
+  }
+  return tracks;
+}
+
+// Stand-ins with well-formed links, for a runner that iTunes does not answer (the room never
+// fetches them).
+const standIns = (entries) =>
+  entries.map((e) => ({ id: e.id, artist: e.artist, title: e.title, year: null, matchedTrack: e.title, matchedArtist: e.artist, previewUrl: `${AUDIO}itunes-assets/smoke/${e.id}.m4a`, artworkUrl: '', appleMusicUrl: null, country: e.country }));
 
 // A socket with a message queue: next(pred) resolves with the first matching message.
 function open(code) {
@@ -78,19 +107,41 @@ async function main() {
   ok(health.status === 200 && health.body?.ok === true, 'GET /api/health');
 
   const sources = await api('/api/sources');
-  ok(sources.body?.sources?.length === 21, `GET /api/sources: ${sources.body?.sources?.length} sources`);
+  const ids = sources.body?.sources?.map((x) => x.id) ?? [];
+  ok(ids.length === 17 && !ids.some((id) => id.startsWith('chart-')), `GET /api/sources: ${ids.length} categories, no charts`);
 
-  for (const source of ['80s', 'chart-at']) {
-    const r = await api(`/api/tracks?source=${source}&n=3`);
-    ok(r.status === 200 && r.body.tracks.length === 3 && r.body.tracks.every(audio), `GET /api/tracks ${source}: ${r.status} ${r.body?.tracks?.length ?? r.body?.error}`);
-  }
+  const pool = await api('/api/pool?source=80s');
+  const entries = pool.body?.entries ?? [];
+  const shape = (e) => Number.isSafeInteger(e.id) && e.artist && e.title && /^[A-Z]{2}$/.test(e.country) && !('previewUrl' in e);
+  ok(pool.status === 200 && entries.length >= 60 && entries.every(shape), `GET /api/pool 80s: ${pool.status} ${entries.length} entries { id, artist, title, country }`);
+  ok((await api('/api/pool?source=chart-at')).status === 404, 'GET /api/pool chart-at -> 404 (charts are read by the browser)');
+
+  const gone = await Promise.all([api('/api/tracks?source=80s&n=3'), api('/api/resolve', { method: 'POST', body: '{}' })]);
+  ok(gone.every((r) => r.status === 404), `old routes gone (no iTunes call from the Worker): /api/tracks ${gone[0].status}, /api/resolve ${gone[1].status}`);
 
   const apple = await api('/api/import', { method: 'POST', body: JSON.stringify({ url: APPLE_PLAYLIST }) });
-  ok(apple.status === 200 && apple.body.tracks.length >= 20, `POST /api/import Apple Music: ${apple.status} ${apple.body?.tracks?.length ?? apple.body?.error} of ${apple.body?.total}`);
+  console.log(`info POST /api/import Apple Music: ${apple.status} ${apple.status === 200 ? `${apple.body.items.length} ids of ${apple.body.total}, ${apple.body.country}` : apple.body?.error}`);
+  ok(
+    (apple.status === 200 && apple.body.kind === 'ids' && apple.body.items.length >= 20 && apple.body.items.every((i) => Number.isSafeInteger(i.id)) && !('tracks' in apple.body)) ||
+      (apple.status === 502 && apple.body?.error === 'apple_blocked'),
+    'Apple Music import answers ids (no lookup) or 502 apple_blocked',
+  );
 
   const yt = await api('/api/import', { method: 'POST', body: JSON.stringify({ url: YOUTUBE_PLAYLIST }) });
-  console.log(`info POST /api/import YouTube: ${yt.status} ${yt.status === 200 ? `${yt.body.tracks.length} tracks of ${yt.body.total}, ${yt.body.unresolved} unresolved` : yt.body?.error}`);
-  ok(yt.status === 200 || (yt.status === 503 && yt.body?.error === 'youtube_unavailable'), 'YouTube import answers 200 or 503 youtube_unavailable');
+  console.log(`info POST /api/import YouTube: ${yt.status} ${yt.status === 200 ? `${yt.body.entries.length} entries of ${yt.body.total}` : yt.body?.error}`);
+  ok((yt.status === 200 && yt.body.kind === 'entries') || (yt.status === 503 && yt.body?.error === 'youtube_unavailable'), 'YouTube import answers entries or 503 youtube_unavailable');
+
+  // The host's songs, built here as the browser does.
+  const picked = entries.slice(0, 25);
+  let tracks;
+  try {
+    tracks = (await lookupTracks(picked)).slice(0, 20);
+    console.log(`info iTunes lookup from this runner: ${tracks.length} of ${picked.length} with previews`);
+  } catch (e) {
+    console.log(`info iTunes lookup from this runner failed (${e.message}); stand-in links instead`);
+    tracks = standIns(picked).slice(0, 20);
+  }
+  ok(tracks.length >= 2 && tracks.every(audio), `host pool: ${tracks.length} tracks`);
 
   const forbidden = await fetch(`${BASE}/api/rooms`, { method: 'POST', headers: { Origin: 'https://evil.example' } });
   ok(forbidden.status === 403, `POST /api/rooms from another origin: ${forbidden.status}`);
@@ -111,10 +162,19 @@ async function main() {
   ok(Boolean(await c.next(isError('name_taken'))), 'same name again -> name_taken');
   c.close();
 
-  a.put({ t: 'start', rounds: 1, source: { kind: 'category', id: '80s' } });
+  b.put({ t: 'start', rounds: 1, label: '1980s', tracks });
+  ok(Boolean(await b.next(isError('not_host'))), 'start from a guest -> not_host');
+  a.put({ t: 'start', rounds: 1, label: '1980s', tracks: [{ ...tracks[0], previewUrl: 'https://evil.example/a.m4a' }, ...tracks.slice(1)] });
+  ok(Boolean(await a.next(isError('bad_request'))), 'a pool with a foreign preview link -> bad_request');
+  a.put({ t: 'start', rounds: 1, label: '1980s', tracks: standIns(entries.slice(0, 51)) });
+  ok(Boolean(await a.next(isError('bad_request'))), 'a pool of 51 songs -> bad_request');
+
+  const start = JSON.stringify({ t: 'start', rounds: 1, label: '1980s', tracks });
+  a.put(start);
   const playing = (r) => r.phase === 'playing' && r.game?.previewUrl;
   const [va, vb] = await Promise.all([a.next(isRoom(playing), 20000), b.next(isRoom(playing), 20000)]);
-  ok(audio(va.room.game) && va.room.game.answer === null && vb.room.game.answer === null, 'both playing, preview set, answer hidden');
+  ok(audio(va.room.game) && va.room.game.answer === null && vb.room.game.answer === null, `both playing after a ${start.length}-byte host start, preview set, answer hidden`);
+  ok(tracks.some((t) => t.previewUrl === va.room.game.previewUrl), 'the round plays a song the host sent');
 
   a.put({ t: 'guess', round: 1, id: 1, artist: 'Nobody', title: 'Nothing at all' });
   const ga = await a.next(isRoom((r) => r.game?.me?.entries?.length === 1));
