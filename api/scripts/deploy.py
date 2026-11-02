@@ -6,7 +6,7 @@ and never prints them; prints only HTTP status codes and Cloudflare error messag
 
 Usage:
   set -a; . /path/to/fiveguesses.env; set +a
-  python3 -I api/scripts/deploy.py [--no-secret] [--no-wait]
+  python3 -I api/scripts/deploy.py [--no-secret] [--no-domain] [--no-wait]
 """
 
 from __future__ import annotations
@@ -106,6 +106,7 @@ def wait_for_health(timeout: int = 600) -> bool:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--no-secret", action="store_true", help="keep the YOUTUBE_API_KEY already set")
+    ap.add_argument("--no-domain", action="store_true", help="upload only; leave the custom domain as it is")
     ap.add_argument("--no-wait", action="store_true", help="do not poll /api/health")
     args = ap.parse_args(argv)
     token = os.environ.get("CLOUDFLARE_API_TOKEN")
@@ -130,6 +131,8 @@ def main(argv: list[str]) -> int:
                 call("PUT", f"/accounts/{acct}/workers/scripts/{SCRIPT}/secrets", token, secret)
             else:
                 print("YOUTUBE_API_KEY not set, secret skipped")
+        if args.no_domain:
+            return 0
         domain = {"hostname": HOST, "service": SCRIPT, "zone_id": zone, "environment": "production"}
         try:
             call("PUT", f"/accounts/{acct}/workers/domains", token, json.dumps(domain).encode())
