@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { getTracks } from './api';
+import type { Track } from './api';
 import type { SnippetView } from './audio/snippetLogic';
 import { useSnippetPlayer } from './audio/useSnippetPlayer';
 import { SITE_HOST } from './config';
@@ -7,7 +9,7 @@ import { pickFreePlayIndex } from './freePlay';
 import { dailySongIndex, MAX_GUESSES, SNIPPET_SECONDS, songLabel } from './game';
 import type { GuessEntry, RoundStatus, Song } from './game';
 import { t } from './i18n';
-import { isOver, roundReducer, unlockedIndex } from './round';
+import { isOver, roundAnswer, roundReducer, unlockedIndex } from './round';
 import type { RoundEvent, RoundState } from './round';
 import { shareOutcomeMessage, shareResult, shareText as buildShareText } from './share';
 import type { ShareOutcome } from './share';
@@ -25,6 +27,23 @@ import {
   STORAGE_PREFIX,
 } from './storage';
 import { useDailyPuzzle } from './useDailyPuzzle';
+
+// Where free rounds take their songs from. A pool lives in memory only.
+export type FreeSource =
+  | { kind: 'builtin' }
+  | { kind: 'pool'; id: string | null; label: string; tracks: Track[]; next: number; played: number[] };
+
+// What the song sheet hands over: the built-in songs, a category or chart, or resolved tracks.
+export type SourceChoice =
+  | { kind: 'builtin' }
+  | { kind: 'category'; id: string; label: string }
+  | { kind: 'tracks'; label: string; tracks: Track[] };
+
+type Pool = Extract<FreeSource, { kind: 'pool' }>;
+
+// Songs fetched per pool; a used-up pool fetches again without the last 100 played.
+const POOL_SIZE = 20;
+const EXCLUDE_MAX = 100;
 
 export type GameOptions = {
   // Receives every message for the polite live region.
@@ -53,6 +72,10 @@ export type Game = {
   guess: (song: Song) => void;
   skip: () => void;
   startFreePlay: () => void;
+  // Starts a free round from the chosen songs; on any failure a built-in round instead.
+  chooseSource: (choice: SourceChoice) => void;
+  // The label of the free songs in use; null for the built-in songs.
+  sourceLabel: string | null;
   backToDaily: () => void;
   // The share ladder of a finished daily round; null while playing and in free play.
   shareText: string | null;
@@ -85,12 +108,21 @@ function missMessage(state: RoundState): string | null {
 // outcome of the last move.
 function roundMessage(state: RoundState): string | null {
   if (!isOver(state)) return missMessage(state);
-  const song = songLabel(SONGS[state.songIndex]);
+  const song = songLabel(roundAnswer(state));
   return state.status === 'won' ? t('live.won', { song }) : t('live.lost', { song });
 }
 
 function reduce(state: RoundState, event: RoundEvent): RoundState {
-  return roundReducer(state, event, SONGS[state.songIndex]);
+  return roundReducer(state, event, roundAnswer(state));
+}
+
+function shuffled<T>(list: readonly T[]): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function dailyStart(puzzle: number): RoundState {
@@ -129,8 +161,11 @@ export function useGame(options: GameOptions = {}): Game {
   const [shareOutcome, setShareOutcome] = useState<ShareOutcome | null>(null);
   // Free rounds served in this session; forgotten on reload.
   const playedFree = useRef(new Set<number>());
+  const [source, setSource] = useState<FreeSource>({ kind: 'builtin' });
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
 
-  const answer = SONGS[round.songIndex];
+  const answer = roundAnswer(round);
   const snippet = useSnippetPlayer(answer.previewUrl);
   const { stop } = snippet;
 
@@ -159,7 +194,7 @@ export function useGame(options: GameOptions = {}): Game {
           songIndex: dailyIndex,
           saved: saved ? { entries: saved.entries, status: saved.status } : null,
         });
-      } else if (roundRef.current.songIndex === dailyIndex) {
+      } else if (roundRef.current.track === undefined && roundRef.current.songIndex === dailyIndex) {
         const songIndex = pickFreePlayIndex(SONG_COUNT, new Set<number>([dailyIndex, ...playedFree.current]));
         playedFree.current.add(songIndex);
         dispatch({ type: 'startFree', songIndex });
@@ -206,7 +241,7 @@ export function useGame(options: GameOptions = {}): Game {
       songIndex: current.songIndex,
       saved: { entries: saved.entries, status: saved.status },
     };
-    const next = roundReducer(current, event, SONGS[current.songIndex]);
+    const next = roundReducer(current, event, roundAnswer(current));
     stop();
     setShareOutcome(null);
     dispatch(event);
@@ -244,7 +279,7 @@ export function useGame(options: GameOptions = {}): Game {
   // A guess or a skip on the round on screen: the reducer decides, storage and the stats follow.
   const commit = useCallback(
     (current: RoundState, event: RoundEvent) => {
-      const next = roundReducer(current, event, SONGS[current.songIndex]);
+      const next = roundReducer(current, event, roundAnswer(current));
       if (next === current) return;
       dispatch(event);
       roundRef.current = next;
@@ -294,7 +329,7 @@ export function useGame(options: GameOptions = {}): Game {
   const guess = useCallback((song: Song) => apply({ type: 'guess', song }), [apply]);
   const skip = useCallback(() => apply({ type: 'skip' }), [apply]);
 
-  const startFreePlay = useCallback(() => {
+  const startBuiltin = useCallback(() => {
     stop();
     const excluded = new Set<number>([dailySongIndex(puzzleRef.current, SONG_COUNT), ...playedFree.current]);
     const songIndex = pickFreePlayIndex(SONG_COUNT, excluded);
@@ -303,6 +338,90 @@ export function useGame(options: GameOptions = {}): Game {
     dispatch({ type: 'startFree', songIndex });
     announce(t('live.freeStarted'));
   }, [stop, announce]);
+
+  // The pool's next track, refilled when it is used up: a category or chart fetches more songs
+  // it has not played yet (or reshuffles when that fails), an imported list starts over.
+  const playFromPool = useCallback(
+    async (pool: Pool) => {
+      let current = pool;
+      if (current.next >= current.tracks.length) {
+        let tracks: Track[] = [];
+        if (current.id !== null) {
+          try {
+            tracks = (await getTracks(current.id, POOL_SIZE, current.played.slice(-EXCLUDE_MAX))).tracks;
+          } catch {
+            tracks = [];
+          }
+        }
+        current = { ...current, tracks: tracks.length > 0 ? tracks : shuffled(current.tracks), next: 0 };
+      }
+      if (sourceRef.current !== pool) return;
+      const track = current.tracks[current.next];
+      const updated = { ...current, next: current.next + 1, played: [...current.played, track.id].slice(-EXCLUDE_MAX) };
+      sourceRef.current = updated;
+      setSource(updated);
+      stop();
+      setShareOutcome(null);
+      dispatch({ type: 'startFree', songIndex: -1, track });
+      announce(t('live.freeStarted'));
+    },
+    [stop, announce]
+  );
+
+  const startFreePlay = useCallback(() => {
+    const current = sourceRef.current;
+    if (current.kind === 'builtin') startBuiltin();
+    else void playFromPool(current);
+  }, [startBuiltin, playFromPool]);
+
+  const chooseSource = useCallback(
+    (choice: SourceChoice) => {
+      const builtin = (failed: boolean) => {
+        const next: FreeSource = { kind: 'builtin' };
+        sourceRef.current = next;
+        setSource(next);
+        startBuiltin();
+        if (failed) announce(t('sources.loadFailed'));
+      };
+      if (choice.kind === 'builtin') {
+        builtin(false);
+        return;
+      }
+      announce(t('sources.loading'));
+      void (async () => {
+        let label = choice.label;
+        let tracks: Track[];
+        try {
+          if (choice.kind === 'category') {
+            const list = await getTracks(choice.id, POOL_SIZE);
+            label = list.label || label;
+            tracks = list.tracks;
+          } else {
+            tracks = shuffled(choice.tracks);
+          }
+        } catch {
+          tracks = [];
+        }
+        if (tracks.length === 0) {
+          builtin(true);
+          return;
+        }
+        const pool: Pool = {
+          kind: 'pool',
+          id: choice.kind === 'category' ? choice.id : null,
+          label,
+          tracks,
+          next: 0,
+          played: [],
+        };
+        sourceRef.current = pool;
+        setSource(pool);
+        await playFromPool(pool);
+        announce(t('live.sourceStarted', { source: label }));
+      })();
+    },
+    [startBuiltin, playFromPool, announce]
+  );
 
   const backToDaily = useCallback(() => {
     stop();
@@ -337,6 +456,8 @@ export function useGame(options: GameOptions = {}): Game {
     setShareOutcome(null);
     dispatch({ type: 'startDaily', puzzle, songIndex: dailySongIndex(puzzle, SONG_COUNT), saved: null });
     playedFree.current.clear();
+    sourceRef.current = { kind: 'builtin' };
+    setSource(sourceRef.current);
     announce(t('about.resetDone'));
   }, [stop, announce]);
 
@@ -387,6 +508,8 @@ export function useGame(options: GameOptions = {}): Game {
     guess,
     skip,
     startFreePlay,
+    chooseSource,
+    sourceLabel: round.mode === 'free' && round.track !== undefined && source.kind === 'pool' ? source.label : null,
     backToDaily,
     shareText,
     shareOutcome,

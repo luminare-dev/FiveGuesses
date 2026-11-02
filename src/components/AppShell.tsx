@@ -1,8 +1,11 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { focusWasDropped } from '../a11y/focus';
 import { useAnnouncer } from '../a11y/useAnnouncer';
+import { createRoom } from '../api';
 import { t } from '../i18n';
+import { parseRoute, roomPath } from '../route';
 import { SONGS } from '../songs';
 import type { Theme } from '../theme';
 import { text } from '../theme/typography';
@@ -15,20 +18,37 @@ import { GuessCombobox } from './GuessCombobox';
 import { Header } from './Header';
 import { LiveRegion } from './LiveRegion';
 import { Reveal } from './Reveal';
+import { RoomScreen } from './RoomScreen';
 import { SnippetBar } from './SnippetBar';
+import { SourceSheet } from './SourceSheet';
 import { StatsSheet } from './StatsSheet';
 
-type SheetName = 'stats' | 'about' | null;
+type SheetName = 'stats' | 'about' | 'sources' | null;
 
-// True when the focused element was removed and the browser fell back to the page body.
-function focusWasDropped(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.activeElement === null || document.activeElement === document.body;
+// Creates a room and opens it; false when the service did not answer.
+async function openNewRoom(): Promise<boolean> {
+  try {
+    const code = await createRoom();
+    if (typeof window !== 'undefined') window.location.assign(roomPath(code));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-// The one screen: header, live region, the main column and the footer, with the two sheets
-// on top. The only consumer of useGame; every announcement goes through one announcer.
+function currentPath(): string {
+  return typeof window !== 'undefined' && window.location !== undefined ? window.location.pathname : '/';
+}
+
+// /r/<CODE> is a room; every other path is the game.
 export function AppShell() {
+  const route = useMemo(() => parseRoute(currentPath()), []);
+  return route.kind === 'room' ? <RoomScreen code={route.code} /> : <GameScreen />;
+}
+
+// The game screen: header, live region, the main column and the footer, with the sheets on
+// top. The only consumer of useGame; every announcement goes through one announcer.
+function GameScreen() {
   const { theme, scheme, preference, setPreference } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { message, nonce, announce, withdraw } = useAnnouncer();
@@ -53,6 +73,13 @@ export function AppShell() {
     setSheet('about');
   }, []);
   const closeSheet = useCallback(() => setSheet(null), []);
+  const chooseButton = useRef<View>(null);
+  const openSources = useCallback(() => setSheet('sources'), []);
+  const playWithFriends = useCallback(() => {
+    void openNewRoom().then((ok) => {
+      if (!ok) announce(t('rooms.createFailed'));
+    });
+  }, [announce]);
 
   // A round that ends removes the guess box, and a round that starts removes the result card,
   // so the control that had focus is gone. Focus then moves to the result heading or to the play
@@ -85,6 +112,7 @@ export function AppShell() {
             <Header
               mode={round.mode}
               puzzle={round.puzzle}
+              source={game.sourceLabel}
               onOpenStats={openStats}
               onOpenAbout={openAboutFromHeader}
               statsButtonRef={statsButton}
@@ -109,6 +137,7 @@ export function AppShell() {
               {restored && !over && (
                 <GuessCombobox
                   songs={SONGS}
+                  live={round.mode === 'free'}
                   nextSeconds={game.nextSeconds}
                   isLastGuess={game.isLastGuess}
                   onGuess={game.guess}
@@ -127,11 +156,18 @@ export function AppShell() {
                   onShare={game.share}
                   onFreePlay={game.startFreePlay}
                   onBackToDaily={game.backToDaily}
+                  onChooseSongs={openSources}
+                  onPlayWithFriends={openNewRoom}
+                  chooseButtonRef={chooseButton}
                   headingRef={revealHeading}
                 />
               )}
             </View>
-            <Footer onOpenAbout={openAboutFromFooter} aboutButtonRef={footerAbout} />
+            <Footer
+              onOpenAbout={openAboutFromFooter}
+              aboutButtonRef={footerAbout}
+              onPlayWithFriends={playWithFriends}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -150,6 +186,13 @@ export function AppShell() {
         preference={preference}
         onPreferenceChange={setPreference}
         onReset={reset}
+      />
+      <SourceSheet
+        visible={sheet === 'sources'}
+        onClose={closeSheet}
+        openerRef={chooseButton}
+        mode="free"
+        onChoose={game.chooseSource}
       />
     </View>
   );
