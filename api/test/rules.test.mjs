@@ -11,7 +11,8 @@ import {
   PLACE_BONUS,
   REVEAL_MS,
   SEAT_TTL,
-  beginGame,
+  MAX_POOL,
+  cleanTrack,
   createRoom,
   disconnect,
   handle,
@@ -19,7 +20,6 @@ import {
   roomMessages,
   roundPoints,
   standings,
-  startFailed,
   tick,
   view,
 } from '../src/rules.mjs';
@@ -62,10 +62,10 @@ const send = (room, sock, msg, now = T0) => handle(room, sock, msg, now, newId);
 
 function startGame(ctx, rounds = 3, now = T0) {
   const host = Object.values(ctx.s).find((x) => x.pid === ctx.room.hostId);
-  const res = send(ctx.room, host, { t: 'start', rounds, source: { kind: 'category', id: '80s' } }, now);
-  assert.equal(res.room.phase, 'starting');
-  assert.deepEqual(res.start, { rounds, source: { kind: 'category', id: '80s' } });
-  ctx.room = beginGame(res.room, { label: '1980s', tracks: TRACKS, rounds }, now).room;
+  const res = send(ctx.room, host, { t: 'start', rounds, label: '1980s', tracks: TRACKS }, now);
+  assert.equal(res.reply, undefined);
+  assert.equal(res.room.phase, 'playing');
+  ctx.room = res.room;
   return ctx;
 }
 
@@ -190,19 +190,66 @@ test('round start: sitters-out are out, late joiners wait', () => {
   assert.equal(late.room.game.board[late.seat].status, 'waiting');
 });
 
-test('start needs the host, a valid source and an active player; failures go back', () => {
+test('start needs the host, a label, a valid pool and an active player', () => {
   const ctx = setup(['Anna', 'Ben']);
-  assert.equal(as(ctx, 'Ben', { t: 'start', rounds: 3, source: { kind: 'category', id: '80s' } }).reply.code, 'not_host');
-  assert.equal(as(ctx, 'Anna', { t: 'start', rounds: 0, source: { kind: 'category', id: '80s' } }).reply.code, 'bad_request');
-  assert.equal(as(ctx, 'Anna', { t: 'start', rounds: 3, source: { kind: 'ids', label: 'x', ids: [] } }).reply.code, 'bad_request');
-  const res = as(ctx, 'Anna', { t: 'start', rounds: 3, source: { kind: 'ids', label: 'Mine', ids: [{ id: 5, country: 'AT' }] } });
-  assert.equal(res.start.source.kind, 'ids');
-  const empty = beginGame(ctx.room, { label: 'Mine', tracks: [], rounds: 3 }, T0);
-  assert.equal(empty.room.phase, 'lobby');
-  assert.deepEqual(empty.send, [{ id: ctx.s.Anna.pid, msg: { t: 'error', code: 'source_empty' } }]);
-  assert.equal(startFailed(ctx.room, 'source_failed').room.phase, 'lobby');
-  const short = beginGame(ctx.room, { label: 'Mine', tracks: TRACKS.slice(0, 2), rounds: 10 }, T0).room;
-  assert.equal(short.game.rounds, 2);
+  const start = (extra) => ({ t: 'start', rounds: 3, label: 'Mine', tracks: TRACKS, ...extra });
+  assert.equal(as(ctx, 'Ben', start()).reply.code, 'not_host');
+  for (const bad of [
+    { rounds: 0 },
+    { rounds: 21 },
+    { label: '' },
+    { label: '   ' },
+    { label: 'x'.repeat(61) },
+    { tracks: [] },
+    { tracks: undefined },
+    { tracks: Array.from({ length: MAX_POOL + 1 }, (_, i) => track(i + 1)) },
+    { tracks: [...TRACKS, { ...track(9), previewUrl: 'https://evil.example/p.m4a' }] },
+    { source: { kind: 'category', id: '80s' }, tracks: undefined },
+  ]) {
+    const res = as(ctx, 'Anna', start(bad));
+    assert.equal(res.reply?.code, 'bad_request', JSON.stringify(bad).slice(0, 80));
+    assert.equal(res.room.phase, 'lobby');
+  }
+  const res = as(ctx, 'Anna', start({ rounds: 10, tracks: [TRACKS[0], TRACKS[1], TRACKS[0]] }));
+  assert.equal(res.room.phase, 'playing');
+  assert.equal(res.room.game.rounds, 2, 'at most one round per distinct song');
+  assert.equal(res.room.game.label, 'Mine');
+  assert.deepEqual(res.room.game.tracks.map((t) => t.id), [TRACKS[0].id, TRACKS[1].id]);
+  assert.equal(view(res.room, ctx.s.Ben.pid).game.answer, null);
+});
+
+test('every pool song is checked field by field', () => {
+  const t = track(1);
+  assert.deepEqual(cleanTrack(t), t);
+  assert.deepEqual(cleanTrack({ ...t, year: 1985, extra: 'x', matchedTrack: undefined }), { ...t, matchedTrack: t.title });
+  assert.equal(cleanTrack({ ...t, artworkUrl: 'https://is5-ssl.mzstatic.com/image/a/512x512bb.jpg' }).artworkUrl, 'https://is5-ssl.mzstatic.com/image/a/512x512bb.jpg');
+  assert.equal(cleanTrack({ ...t, appleMusicUrl: 'https://music.apple.com/at/album/x/1?i=2' }).appleMusicUrl, 'https://music.apple.com/at/album/x/1?i=2');
+  for (const bad of [
+    { id: '1001' },
+    { id: 0 },
+    { id: 1.5 },
+    { artist: '' },
+    { artist: ' ' },
+    { title: 'x'.repeat(201) },
+    { title: 5 },
+    { matchedArtist: 'x'.repeat(201) },
+    { previewUrl: 'http://audio-ssl.itunes.apple.com/p.m4a' },
+    { previewUrl: 'https://audio-ssl.itunes.apple.com.evil.example/p.m4a' },
+    { previewUrl: `https://audio-ssl.itunes.apple.com/${'x'.repeat(500)}` },
+    { previewUrl: undefined },
+    { artworkUrl: 'http://is1-ssl.mzstatic.com/a.jpg' },
+    { artworkUrl: 'https://mzstatic.com.evil.example/a.jpg' },
+    { artworkUrl: 'javascript:alert(1)' },
+    { appleMusicUrl: 'https://music.apple.com.evil.example/x' },
+    { appleMusicUrl: 'javascript:alert(1)' },
+    { appleMusicUrl: '' },
+    { country: 'at' },
+    { country: undefined },
+  ]) {
+    assert.equal(cleanTrack({ ...t, ...bad }), null, JSON.stringify(bad).slice(0, 80));
+  }
+  assert.equal(cleanTrack(null), null);
+  assert.equal(cleanTrack('x'), null);
 });
 
 test('guesses: partial, stage doubling, five misses lose', () => {

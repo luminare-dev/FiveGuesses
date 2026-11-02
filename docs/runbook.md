@@ -80,9 +80,11 @@ Shorten IP addresses after at most 7 days and delete logs after at most 5 weeks.
 
 ## 8. API (api.fiveguesses.app)
 
-The Worker `fiveguesses-api` (Cloudflare Workers Free, Durable Objects on SQLite) serves song
-sources, playlist import and rooms. The account needs a workers.dev subdomain once (open Workers
-in the dashboard) before the first upload.
+The Worker `fiveguesses-api` (Cloudflare Workers Free, Durable Objects on SQLite) serves the
+category lists, playlist import and rooms. It never calls `itunes.apple.com` (Apple refuses Workers
+there): the browser looks up previews, charts and matches itself, and the host's browser sends a
+room its songs. The account needs a workers.dev subdomain once (open Workers in the dashboard)
+before the first upload.
 
 ```sh
 set -a; . /path/to/fiveguesses.env; set +a   # CLOUDFLARE_API_TOKEN, YOUTUBE_API_KEY

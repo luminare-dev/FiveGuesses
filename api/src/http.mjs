@@ -1,14 +1,13 @@
 // Router, CORS and request validation. No cloudflare:workers import, so node --test can load it.
-// deps = { fetch, now, random, rooms, cache?, getRandomValues? }
+// deps = { fetch, now, rooms, getRandomValues? }
 import { ApiError, budget } from './apple.mjs';
-import { importPlaylist, publicSources, resolveEntries, sampleTracks } from './sources.mjs';
+import { categoryPool, importPlaylist, publicSources } from './sources.mjs';
 
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 const LOCALHOST = /^http:\/\/localhost(:\d{1,5})?$/;
 const SOURCE_ID = /^[a-z0-9-]{1,40}$/;
 const IMPORT_MAX = 2 * 1024;
-const RESOLVE_MAX = 16 * 1024;
 const CODE_TRIES = 3;
 
 export const allowedOrigin = (o) => o === 'https://fiveguesses.app' || LOCALHOST.test(o);
@@ -68,18 +67,6 @@ async function readJson(request, max) {
 
 const str = (s, max) => typeof s === 'string' && s.trim().length >= 1 && s.length <= max;
 
-function parseTracksQuery(params) {
-  const source = params.get('source') || '';
-  if (!SOURCE_ID.test(source)) return null;
-  const nRaw = params.get('n');
-  const n = nRaw == null ? 20 : Number(nRaw);
-  if (!Number.isInteger(n) || n < 1 || n > 30) return null;
-  const exRaw = params.get('exclude') || '';
-  const exclude = exRaw ? exRaw.split(',') : [];
-  if (exclude.length > 100 || !exclude.every((x) => /^\d{1,15}$/.test(x))) return null;
-  return { source, n, exclude: exclude.map(Number) };
-}
-
 async function createRoom(deps) {
   for (let i = 0; i < CODE_TRIES; i++) {
     const code = newCode(deps.getRandomValues);
@@ -93,9 +80,8 @@ async function createRoom(deps) {
 const ROUTES = {
   '/api/health': 'GET',
   '/api/sources': 'GET',
-  '/api/tracks': 'GET',
+  '/api/pool': 'GET',
   '/api/import': 'POST',
-  '/api/resolve': 'POST',
   '/api/rooms': 'POST',
 };
 
@@ -121,8 +107,8 @@ export async function handle(request, env, deps) {
   }
   if ((method === 'POST' || ws) && !origin) return fail(403, 'origin_forbidden', null);
 
-  // Per IP and route, before any work: RL for the API calls, RL_WS for room connections.
-  const limiter = ws ? env.RL_WS : method === 'POST' || url.pathname === '/api/tracks' ? env.RL : null;
+  // Per IP and route, before any work: RL for the POST calls, RL_WS for room connections.
+  const limiter = ws ? env.RL_WS : method === 'POST' ? env.RL : null;
   if (limiter) {
     const ip = request.headers.get('CF-Connecting-IP') || '';
     const { success } = await limiter.limit({ key: `${ip}|${ws ? 'ws' : url.pathname}` });
@@ -144,29 +130,15 @@ export async function handle(request, env, deps) {
         return respond(200, { ok: true }, origin);
       case '/api/sources':
         return respond(200, { sources: publicSources() }, origin, { 'Cache-Control': 'public, max-age=3600' });
-      case '/api/tracks': {
-        const q = parseTracksQuery(url.searchParams);
-        if (!q) return fail(400, 'bad_request', origin);
-        return respond(200, await sampleTracks(q.source, q.n, q.exclude, d), origin);
+      case '/api/pool': {
+        const source = url.searchParams.get('source') || '';
+        if (!SOURCE_ID.test(source)) return fail(400, 'bad_request', origin);
+        return respond(200, categoryPool(source), origin, { 'Cache-Control': 'public, max-age=3600' });
       }
       case '/api/import': {
         const body = await readJson(request, IMPORT_MAX);
         if (!body || !str(body.url, 1000)) return fail(400, 'bad_request', origin);
         return respond(200, await importPlaylist(body.url.trim(), d, env), origin);
-      }
-      case '/api/resolve': {
-        const body = await readJson(request, RESOLVE_MAX);
-        const entries = body?.entries;
-        if (
-          !Array.isArray(entries) ||
-          entries.length < 1 ||
-          entries.length > 30 ||
-          !entries.every((e) => e && str(e.artist, 200) && str(e.title, 200))
-        ) {
-          return fail(400, 'bad_request', origin);
-        }
-        const clean = entries.map((e) => ({ artist: e.artist.trim(), title: e.title.trim() }));
-        return respond(200, await resolveEntries(clean, d), origin);
       }
       case '/api/rooms': {
         const code = await createRoom(deps);
@@ -175,7 +147,7 @@ export async function handle(request, env, deps) {
     }
   } catch (e) {
     if (e instanceof ApiError) {
-      const code = e.code === 'budget' ? 'apple_unavailable' : e.code;
+      const code = e.code === 'budget' ? 'upstream_unavailable' : e.code;
       return fail(e.status, code, origin);
     }
     return fail(500, 'internal', origin);

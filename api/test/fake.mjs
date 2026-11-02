@@ -23,17 +23,3 @@ export function fakeFetch(routes) {
 }
 
 export const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
-
-// An iTunes result with a valid preview.
-export const result = (trackId, artistName, trackName, extra = {}) => ({
-  wrapperType: 'track',
-  kind: 'song',
-  trackId,
-  artistName,
-  trackName,
-  collectionName: trackName,
-  previewUrl: `https://audio-ssl.itunes.apple.com/itunes-assets/p/${trackId}.m4a`,
-  artworkUrl100: `https://is1-ssl.mzstatic.com/image/thumb/x/${trackId}.jpg/100x100bb.jpg`,
-  trackViewUrl: `https://music.apple.com/at/album/x/1?i=${trackId}`,
-  ...extra,
-});

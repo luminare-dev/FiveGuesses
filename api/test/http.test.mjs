@@ -25,7 +25,6 @@ const deps = (extra = {}) => ({
     throw new Error('no network in tests');
   },
   now: () => 0,
-  random: () => 0.5,
   rooms: rooms(),
   ...extra,
 });
@@ -68,7 +67,7 @@ test('allowed origins get CORS headers', async () => {
     assert.equal(res.headers.get('access-control-allow-origin'), o);
     assert.equal(res.headers.get('vary'), 'Origin');
     assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
-    assert.equal((await res.json()).sources.length, 21);
+    assert.equal((await res.json()).sources.length, 17);
   }
 });
 
@@ -104,21 +103,29 @@ test('unknown routes 404, wrong methods 405', async () => {
   assert.equal((await call('/api/rooms')).status, 405);
 });
 
-test('tracks query validation', async () => {
-  for (const q of ['', '?source=../x', '?source=80s&n=0', '?source=80s&n=31', '?source=80s&n=2.5', '?source=80s&exclude=1,a']) {
-    assert.equal((await call(`/api/tracks${q}`)).status, 400, q);
+test('pool: every entry of a category, cacheable, no upstream call', async () => {
+  const res = await call('/api/pool?source=80s', { origin: OK });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=3600');
+  const body = await res.json();
+  assert.equal(body.source, '80s');
+  assert.equal(body.label, '1980s');
+  assert.ok(body.entries.length >= 60);
+  for (const e of body.entries) {
+    assert.deepEqual(Object.keys(e), ['id', 'artist', 'title', 'country']);
+    assert.ok(Number.isSafeInteger(e.id) && /^[A-Z]{2}$/.test(e.country));
   }
-  const many = Array.from({ length: 101 }, (_, i) => i + 1).join(',');
-  assert.equal((await call(`/api/tracks?source=80s&exclude=${many}`)).status, 400);
-  const res = await call('/api/tracks?source=nope');
-  assert.equal(res.status, 404);
-  assert.deepEqual(await res.json(), { error: 'source_unknown' });
+  for (const q of ['', '?source=../x', '?source=' + 'a'.repeat(41)]) {
+    assert.equal((await call(`/api/pool${q}`)).status, 400, q);
+  }
+  const unknown = await call('/api/pool?source=chart-at');
+  assert.equal(unknown.status, 404);
+  assert.deepEqual(await unknown.json(), { error: 'source_unknown' });
 });
 
-test('tracks upstream failure -> 502 apple_unavailable', async () => {
-  const res = await call('/api/tracks?source=80s&n=3');
-  assert.equal(res.status, 502);
-  assert.deepEqual(await res.json(), { error: 'apple_unavailable' });
+test('the removed routes are gone', async () => {
+  assert.equal((await call('/api/tracks?source=80s&n=3')).status, 404);
+  assert.equal((await call('/api/resolve', { method: 'POST', origin: OK, body: '{}' })).status, 404);
 });
 
 test('body limits and shapes', async () => {
@@ -128,13 +135,9 @@ test('body limits and shapes', async () => {
   const unsupported = await post('/api/import', JSON.stringify({ url: 'https://example.com/list' }));
   assert.equal(unsupported.status, 400);
   assert.deepEqual(await unsupported.json(), { error: 'playlist_unsupported' });
-  const entry = { artist: 'a-ha', title: 'Take On Me' };
-  assert.equal((await post('/api/resolve', JSON.stringify({ entries: [] }))).status, 400);
-  assert.equal((await post('/api/resolve', JSON.stringify({ entries: Array(31).fill(entry) }))).status, 400);
-  assert.equal((await post('/api/resolve', JSON.stringify({ entries: [{ artist: '', title: 'x' }] }))).status, 400);
-  assert.equal((await post('/api/resolve', JSON.stringify({ entries: [{ artist: 'a'.repeat(201), title: 'x' }] }))).status, 400);
-  const big = JSON.stringify({ entries: [entry], pad: 'x'.repeat(17 * 1024) });
-  assert.equal((await post('/api/resolve', big)).status, 400);
+  assert.equal((await post('/api/import', JSON.stringify({ url: '   ' }))).status, 400);
+  const big = JSON.stringify({ url: 'https://example.com/list', pad: 'x'.repeat(3 * 1024) });
+  assert.equal((await post('/api/import', big)).status, 400);
 });
 
 test('a body without Content-Length is read up to the limit only', async () => {
@@ -145,7 +148,7 @@ test('a body without Content-Length is read up to the limit only', async () => {
         c.close();
       },
     });
-  const res = await call('/api/resolve', { method: 'POST', origin: OK, body: chunked(64 * 1024) });
+  const res = await call('/api/import', { method: 'POST', origin: OK, body: chunked(64 * 1024) });
   assert.equal(res.status, 400);
   const small = new ReadableStream({
     start(c) {
@@ -172,14 +175,14 @@ test('rate limits per IP and route, before any work', async () => {
   assert.deepEqual(await res.json(), { error: 'slow_down' });
   assert.equal(d.rooms.calls.length, 1, 'no room made after the limit');
   assert.equal((await call('/api/rooms', { method: 'POST', origin: OK, headers: { 'CF-Connecting-IP': '203.0.113.8' }, env }, d)).status, 201);
-  const resolve = { method: 'POST', origin: OK, headers, env, body: '{' };
-  assert.equal((await call('/api/resolve', resolve, d)).status, 400);
-  assert.equal((await call('/api/resolve', resolve, d)).status, 429);
+  const broken = { method: 'POST', origin: OK, headers, env, body: '{' };
+  assert.equal((await call('/api/import', broken, d)).status, 400);
+  assert.equal((await call('/api/import', broken, d)).status, 429);
   const ws = { origin: OK, headers: { ...headers, Upgrade: 'websocket' }, env };
   assert.equal((await call('/api/rooms/ABC234/ws', ws, d)).status, 200);
   assert.equal((await call('/api/rooms/ABC235/ws', ws, d)).status, 429);
-  assert.equal((await call('/api/tracks?source=nope', { headers, env }, d)).status, 404);
-  assert.equal((await call('/api/tracks?source=nope', { headers, env }, d)).status, 429);
+  assert.equal((await call('/api/pool?source=80s', { headers, env }, d)).status, 200);
+  assert.equal((await call('/api/pool?source=80s', { headers, env }, d)).status, 200);
   assert.equal((await call('/api/health', { headers, env }, d)).status, 200);
   assert.equal((await call('/api/health', { headers, env }, d)).status, 200);
   assert.deepEqual(RL_WS.keys, ['203.0.113.7|ws', '203.0.113.7|ws']);

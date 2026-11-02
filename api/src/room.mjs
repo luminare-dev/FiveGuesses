@@ -1,11 +1,11 @@
 // One room per Durable Object: WebSocket Hibernation API, state under the storage key 'room'.
 // The rules live in rules.mjs; this file only does I/O. No setTimeout (hibernation).
 import { DurableObject } from 'cloudflare:workers';
-import { budget } from './apple.mjs';
-import { MAX_SEATS, beginGame, createRoom, disconnect, handle, nextAlarm, roomMessages, startFailed, tick } from './rules.mjs';
-import { lookupTracks, sampleTracks, shuffle } from './sources.mjs';
+import { MAX_SEATS, createRoom, disconnect, handle, nextAlarm, roomMessages, tick } from './rules.mjs';
 
 const MAX_FRAME = 4096;
+// The host's start message carries up to 50 songs.
+const MAX_HOST_FRAME = 128 * 1024;
 const RATE_WINDOW = 10_000;
 const RATE_MAX = 30;
 const OPEN = 1; // WebSocket readyState
@@ -31,9 +31,10 @@ function close(ws, code, reason = '') {
   } catch {}
 }
 
-function frameSize(message) {
+function frameSize(message, max) {
   if (typeof message !== 'string') return message.byteLength;
-  return message.length * 3 <= MAX_FRAME ? message.length : new TextEncoder().encode(message).length;
+  if (message.length > max) return message.length;
+  return message.length * 3 <= max ? message.length : new TextEncoder().encode(message).length;
 }
 
 function playerId() {
@@ -79,8 +80,9 @@ export class Room extends DurableObject {
   }
 
   async webSocketMessage(ws, message) {
-    if (frameSize(message) > MAX_FRAME) return close(ws, 1009, 'too big');
     const att = attachment(ws);
+    const max = att.pid && att.pid === this.room?.hostId ? MAX_HOST_FRAME : MAX_FRAME;
+    if (frameSize(message, max) > max) return close(ws, 1009, 'too big');
     const now = Date.now();
     if (now - att.w >= RATE_WINDOW) {
       att.w = now;
@@ -98,7 +100,6 @@ export class Room extends DurableObject {
     if (!msg) return send(ws, { t: 'error', code: 'bad_request' });
     const res = handle(this.room, { pid: att.pid }, msg, now, () => this.newId());
     await this.apply(res, ws);
-    if (res.start) await this.begin(res.start);
   }
 
   async webSocketClose(ws, code) {
@@ -146,29 +147,6 @@ export class Room extends DurableObject {
     if (!others) await this.apply(disconnect(this.room, pid, Date.now()), null);
   }
 
-  // Tracks for a pending start: a category/chart sample or a list of ids.
-  async begin(start) {
-    const deps = { fetch: (u, i) => fetch(u, i), random: Math.random, budget: budget() };
-    try {
-      deps.cache = caches.default;
-    } catch {}
-    let res;
-    try {
-      let label;
-      let tracks;
-      if (start.source.kind === 'category') {
-        ({ label, tracks } = await sampleTracks(start.source.id, start.rounds + 5, [], deps));
-      } else {
-        label = start.source.label;
-        tracks = shuffle(await lookupTracks(start.source.ids, deps));
-      }
-      res = beginGame(this.room, { label, tracks, rounds: start.rounds }, Date.now());
-    } catch {
-      res = startFailed(this.room, 'source_failed');
-    }
-    await this.apply(res, null);
-  }
-
   async apply(res, ws) {
     const sockets = this.ctx.getWebSockets();
     if (res.wipe) {
@@ -195,15 +173,12 @@ export class Room extends DurableObject {
       ws.serializeAttachment({ ...attachment(ws), pid: null });
       close(ws, res.closeSelf);
     }
-    for (const m of res.send || []) {
-      for (const s of sockets) if (attachment(s).pid === m.id) send(s, m.msg);
-    }
     const before = this.room;
     this.room = res.room;
     if (!this.room) return;
     await this.ctx.storage.put('room', this.room);
     await this.ctx.storage.setAlarm(this.nextAlarm(Date.now()));
-    if (before && !res.seat && !res.close && !res.start && same(before, this.room)) return;
+    if (before && !res.seat && !res.close && same(before, this.room)) return;
     const message = roomMessages(this.room);
     let watcher = null;
     for (const s of this.ctx.getWebSockets()) {

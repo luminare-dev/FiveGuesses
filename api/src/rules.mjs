@@ -1,5 +1,6 @@
 // Room state machine, scoring and the per-player view. Pure: every function takes the room and
-// returns { room, reply?, close?, seat?, closeSelf?, send?, start?, wipe? }; the glue does the I/O.
+// returns { room, reply?, close?, seat?, closeSelf?, wipe? }; the glue does the I/O.
+// The host's client sends the songs with the start message; the room never calls Apple.
 import { classify } from './match.mjs';
 
 export const SNIPPET_SECONDS = [1, 2, 4, 8, 16];
@@ -14,12 +15,16 @@ export const REVEAL_MS = 10_000;
 export const IDLE_TTL = 15 * 60_000;
 export const EMPTY_TTL = 5 * 60_000;
 export const FINISHED_TTL = 10 * 60_000;
-export const START_TIMEOUT = 30_000;
 // Anyone may skip a host who has not moved for this long in a round.
 export const HOST_IDLE = 60_000;
 // One storage value holds the room (2 MB at most), so seats need a cap.
 export const MAX_SEATS = 200;
+// Songs in one start message.
+export const MAX_POOL = 50;
 const KICKED_CAP = 200;
+const URL_MAX = 500;
+const AUDIO_PREFIX = 'https://audio-ssl.itunes.apple.com/';
+const LINK_PREFIX = 'https://music.apple.com/';
 
 const TOKEN = /^[A-Za-z0-9_-]{22}$/;
 const HOST_ONLY = new Set(['start', 'kick', 'skipPlayer', 'endRound', 'endGame', 'next']);
@@ -41,7 +46,6 @@ export function createRoom(code, now) {
     kicked: [],
     emptySince: now,
     finishedAt: null,
-    pendingStart: null,
     players: {},
     game: null,
   };
@@ -195,25 +199,83 @@ function hello(r, sock, msg, now, newId) {
   return { room: r, seat: id };
 }
 
-function validSource(s) {
-  if (!s || typeof s !== 'object') return false;
-  if (s.kind === 'category') return isStr(s.id, 1, 40);
-  if (s.kind !== 'ids' || !isStr(s.label, 1, 60) || !Array.isArray(s.ids)) return false;
-  if (s.ids.length < 1 || s.ids.length > 30) return false;
-  return s.ids.every((x) => x && isInt(x.id, 1, Number.MAX_SAFE_INTEGER) && /^[A-Z]{2}$/.test(x.country ?? ''));
+function parsedUrl(s) {
+  if (typeof s !== 'string' || s.length > URL_MAX) return null;
+  try {
+    return new URL(s);
+  } catch {
+    return null;
+  }
 }
 
+const previewOk = (s) => typeof s === 'string' && s.startsWith(AUDIO_PREFIX) && parsedUrl(s) !== null;
+const linkOk = (s) => s === null || (typeof s === 'string' && s.startsWith(LINK_PREFIX) && parsedUrl(s) !== null);
+function artworkOk(s) {
+  if (s === '') return true;
+  const u = parsedUrl(s);
+  return u !== null && u.protocol === 'https:' && u.hostname.endsWith('.mzstatic.com');
+}
+
+// One song of the host's pool as the room stores it, or null when any field is off.
+export function cleanTrack(t) {
+  if (!t || typeof t !== 'object') return null;
+  if (!isInt(t.id, 1, Number.MAX_SAFE_INTEGER) || !isStr(t.artist, 1, 200) || !isStr(t.title, 1, 200)) return null;
+  if (!t.artist.trim() || !t.title.trim()) return null;
+  const matchedTrack = t.matchedTrack ?? t.title;
+  const matchedArtist = t.matchedArtist ?? t.artist;
+  if (!isStr(matchedTrack, 0, 200) || !isStr(matchedArtist, 0, 200)) return null;
+  const artworkUrl = t.artworkUrl ?? '';
+  const appleMusicUrl = t.appleMusicUrl ?? null;
+  if (!previewOk(t.previewUrl) || !artworkOk(artworkUrl) || !linkOk(appleMusicUrl)) return null;
+  if (!/^[A-Z]{2}$/.test(t.country ?? '')) return null;
+  return {
+    id: t.id,
+    artist: t.artist,
+    title: t.title,
+    year: null,
+    matchedTrack,
+    matchedArtist,
+    previewUrl: t.previewUrl,
+    artworkUrl,
+    appleMusicUrl,
+    country: t.country,
+  };
+}
+
+// 1..50 valid songs, each id once; null when the pool is off.
+function cleanPool(list) {
+  if (!Array.isArray(list) || list.length < 1 || list.length > MAX_POOL) return null;
+  const out = [];
+  const ids = new Set();
+  for (const t of list) {
+    const c = cleanTrack(t);
+    if (!c) return null;
+    if (ids.has(c.id)) continue;
+    ids.add(c.id);
+    out.push(c);
+  }
+  return out;
+}
+
+// { t: 'start', rounds, label, tracks }: the game starts at once with the first songs.
 function start(r, msg, now) {
   if (r.phase !== 'lobby' && r.phase !== 'finished') return { room: r };
-  if (!isInt(msg.rounds, 1, MAX_ROUNDS) || !validSource(msg.source)) return { room: r, reply: err('bad_request') };
+  const tracks = cleanPool(msg.tracks);
+  const label = typeof msg.label === 'string' ? msg.label.trim() : '';
+  if (!isInt(msg.rounds, 1, MAX_ROUNDS) || !isStr(label, 1, 60) || !tracks) return { room: r, reply: err('bad_request') };
   if (!active(r)) return { room: r, reply: err('bad_request') };
-  const source =
-    msg.source.kind === 'category'
-      ? { kind: 'category', id: msg.source.id }
-      : { kind: 'ids', label: msg.source.label, ids: msg.source.ids.map((x) => ({ id: x.id, country: x.country })) };
-  r.pendingStart = { from: r.phase, at: now };
-  r.phase = 'starting';
-  return { room: r, start: { rounds: msg.rounds, source } };
+  if (r.phase === 'finished') {
+    for (const p of Object.values(r.players)) {
+      p.total = 0;
+      p.correct = 0;
+      p.secondsSum = 0;
+    }
+  }
+  const n = Math.min(msg.rounds, tracks.length);
+  r.game = { rounds: n, label, tracks: tracks.slice(0, n), round: 0, revealUntil: null, solved: 0, board: {} };
+  r.finishedAt = null;
+  startRound(r, now);
+  return { room: r };
 }
 
 function answerText(guess) {
@@ -344,34 +406,6 @@ export function disconnect(room, pid, now) {
   return settle({ room: r }, now);
 }
 
-// Tracks arrived for a pending start. label: shown in the game; rounds: as asked.
-export function beginGame(room, { label, tracks, rounds }, now) {
-  if (!room || room.phase !== 'starting') return { room };
-  if (!tracks.length) return startFailed(room, 'source_empty');
-  const r = clone(room);
-  if (r.pendingStart?.from === 'finished') {
-    for (const p of Object.values(r.players)) {
-      p.total = 0;
-      p.correct = 0;
-      p.secondsSum = 0;
-    }
-  }
-  const n = Math.min(rounds, tracks.length);
-  r.game = { rounds: n, label, tracks: tracks.slice(0, n), round: 0, revealUntil: null, solved: 0, board: {} };
-  r.finishedAt = null;
-  r.pendingStart = null;
-  startRound(r, now);
-  return settle({ room: r }, now);
-}
-
-export function startFailed(room, code) {
-  if (!room || room.phase !== 'starting') return { room };
-  const r = clone(room);
-  r.phase = r.pendingStart?.from ?? 'lobby';
-  r.pendingStart = null;
-  return { room: r, send: r.hostId ? [{ id: r.hostId, msg: err(code) }] : [] };
-}
-
 // Applies everything that is due: wipe, seat removal, host transfer, round end, next round.
 export function tick(room, now) {
   if (!room) return { room };
@@ -386,19 +420,13 @@ export function tick(room, now) {
   for (const p of seats(r)) {
     if (!p.connected && p.awaySince != null && now - p.awaySince >= SEAT_TTL) removeSeat(r, p.id);
   }
-  let send;
-  if (r.phase === 'starting' && now - (r.pendingStart?.at ?? 0) >= START_TIMEOUT) {
-    const failed = startFailed(r, 'source_failed');
-    Object.assign(r, failed.room);
-    send = failed.send;
-  }
   settle({ room: r }, now);
   if (r.phase === 'reveal' && r.game.revealUntil != null && now >= r.game.revealUntil) {
     if (active(r)) startRound(r, now);
     else r.game.revealUntil = null;
     settle({ room: r }, now);
   }
-  return send ? { room: r, send } : { room: r };
+  return { room: r };
 }
 
 export function nextAlarm(room, now) {
@@ -407,7 +435,6 @@ export function nextAlarm(room, now) {
   if (room.emptySince != null) t.push(room.emptySince + EMPTY_TTL);
   if (room.finishedAt != null) t.push(room.finishedAt + FINISHED_TTL);
   if (room.phase === 'reveal' && room.game?.revealUntil != null) t.push(room.game.revealUntil);
-  if (room.phase === 'starting' && room.pendingStart) t.push(room.pendingStart.at + START_TIMEOUT);
   for (const p of Object.values(room.players)) {
     if (p.connected || p.awaySince == null) continue;
     if (p.awaySince + DISCONNECT_GRACE > now) t.push(p.awaySince + DISCONNECT_GRACE);
@@ -434,7 +461,7 @@ export function standings(room) {
 // The parts of the view that are the same for every socket.
 function shared(room) {
   const g = room.game;
-  const live = Boolean(g) && room.phase !== 'lobby' && room.phase !== 'starting';
+  const live = Boolean(g) && room.phase !== 'lobby';
   const over = room.phase === 'reveal' || room.phase === 'finished';
   const players = seats(room).map((p) => {
     const b = live ? g.board[p.id] : null;
