@@ -19,7 +19,7 @@ export function parsePlaylistUrl(input) {
   return list && LIST.test(list) ? list : null;
 }
 
-const NOISE = /\s*[([][^)\]]*\b(official|lyrics?|audio|video|visuali[sz]er|hd|hq|4k|clip|offiziell)\b[^)\]]*[)\]]/gi;
+const NOISE = /\s*[([][^)\]]*\b(official|lyrics?|audio|video|visuali[sz]er|hd|hq|4k|clip|offiziell\w*)\b[^)\]]*[)\]]/gi;
 const DASH = [' - ', ' – ', ' — '];
 
 // "Artist - Title (Official Video)" -> { artist, title }; null for deleted or private videos.
