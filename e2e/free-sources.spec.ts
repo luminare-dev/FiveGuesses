@@ -88,7 +88,8 @@ test('a song search that fails falls back to the built-in list and typed guesses
   await page.getByRole('button', { name: 'Play a free round' }).click();
   await combobox(page).click();
   await page.keyboard.type('zzzz qqqq');
-  await expect(page.getByText('Song search is unavailable right now. Type the title and press Guess.')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Song search is unavailable right now. Type the title and press Guess.')).toBeVisible();
+  await expect(liveRegion(page)).toHaveText('Song search is unavailable right now. Type the title and press Guess.');
   await page.keyboard.press('Enter');
   await expect(page.getByRole('listitem', { name: 'Guess 1: wrong, zzzz qqqq' })).toHaveCount(1);
 });
