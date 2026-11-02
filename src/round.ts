@@ -1,4 +1,5 @@
-import { classifyGuess, GuessEntry, MAX_GUESSES, RoundStatus, Song, songLabel } from './game';
+import { classifyGuess, GuessEntry, guessLabel, MAX_GUESSES, RoundStatus, Song, songLabel } from './game';
+import { SONGS } from './songs';
 
 export type { GuessEntry, GuessKind, RoundStatus } from './game';
 
@@ -10,6 +11,8 @@ export type RoundState = {
   songIndex: number; // index into SONGS
   entries: GuessEntry[]; // in order, length <= MAX_GUESSES; the winning guess is the last entry
   status: RoundStatus;
+  // A free round from a category or a playlist plays this track; songIndex is then unused.
+  track?: Song;
 };
 
 export type RoundEvent =
@@ -21,7 +24,7 @@ export type RoundEvent =
       songIndex: number;
       saved: { entries: GuessEntry[]; status: RoundStatus } | null;
     }
-  | { type: 'startFree'; songIndex: number };
+  | { type: 'startFree'; songIndex: number; track?: Song };
 
 // Pure: the same state object comes back when the event changes nothing.
 export function roundReducer(state: RoundState, event: RoundEvent, answer: Song): RoundState {
@@ -34,8 +37,11 @@ export function roundReducer(state: RoundState, event: RoundEvent, answer: Song)
         entries: event.saved ? [...event.saved.entries] : [],
         status: event.saved ? event.saved.status : 'playing',
       };
-    case 'startFree':
-      return { mode: 'free', puzzle: null, songIndex: event.songIndex, entries: [], status: 'playing' };
+    case 'startFree': {
+      const state: RoundState = { mode: 'free', puzzle: null, songIndex: event.songIndex, entries: [], status: 'playing' };
+      if (event.track) state.track = event.track;
+      return state;
+    }
     case 'guess': {
       if (state.status !== 'playing') return state;
       const kind = classifyGuess(event.song, answer);
@@ -43,7 +49,7 @@ export function roundReducer(state: RoundState, event: RoundEvent, answer: Song)
         const entries: GuessEntry[] = [...state.entries, { kind, text: songLabel(answer) }];
         return { ...state, entries, status: 'won' };
       }
-      return miss(state, { kind, text: songLabel(event.song) });
+      return miss(state, { kind, text: guessLabel(event.song).slice(0, 200) });
     }
     case 'skip':
       if (state.status !== 'playing') return state;
@@ -54,6 +60,11 @@ export function roundReducer(state: RoundState, event: RoundEvent, answer: Song)
 function miss(state: RoundState, entry: GuessEntry): RoundState {
   const entries = [...state.entries, entry];
   return { ...state, entries, status: entries.length >= MAX_GUESSES ? 'lost' : 'playing' };
+}
+
+// The song a round plays: its own track, else the built-in song at its index.
+export function roundAnswer(state: RoundState): Song {
+  return state.track ?? SONGS[state.songIndex];
 }
 
 // Which snippet tier is open: one per miss, capped at the last tier.

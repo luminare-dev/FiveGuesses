@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { TextInputKeyPressEvent } from 'react-native';
-import { findExactMatch, normalize, searchSongs, songLabel } from '../game';
+import { findExactMatch, normalize, searchSongs, songLabel, textGuess } from '../game';
 import type { Song } from '../game';
 import { t } from '../i18n';
 import { radius } from '../theme';
@@ -9,10 +9,14 @@ import type { Theme } from '../theme';
 import { text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 import { LISTBOX_ROLE } from '../types/react-native-web';
+import { MAX_SUGGESTIONS, useSuggestions } from '../useSuggestions';
 import { Button } from './Button';
 
 type Props = {
+  // The built-in list: the suggestions of the daily round, the fallback of the live search.
   songs: readonly Song[];
+  // Free play and rooms: suggestions from Apple's catalogue while typing.
+  live?: boolean;
   // Seconds a skip unlocks; null on the last guess.
   nextSeconds: number | null;
   isLastGuess: boolean;
@@ -27,7 +31,6 @@ type Props = {
 const INPUT_ID = 'guess-input';
 const LISTBOX_ID = 'guess-listbox';
 const LAST_WARNING_ID = 'guess-last-warning';
-const MAX_SUGGESTIONS = 8;
 // Typing announces the number of matches once the keys have paused this long.
 const ANNOUNCE_DELAY = 300;
 
@@ -42,7 +45,8 @@ const isQuery = (value: string) => normalize(value).length >= 2;
 // stays in the input; the options are reachable by pointer and through aria-activedescendant.
 // Only the keys move the highlight: a pointer resting where the list opens gets a hover from
 // the browser without being moved, so hover only tints the option and never picks the guess.
-export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip, announce, withdraw }: Props) {
+// Live, the list comes from Apple with the covers, and its count is announced once it arrives.
+export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, onGuess, onSkip, announce, withdraw }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const inputRef = useRef<TextInput>(null);
@@ -53,10 +57,13 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
   // Escape and Tab close the list until the text changes again.
   const [dismissed, setDismissed] = useState(false);
 
-  const suggestions = useMemo(() => searchSongs(songs, query, MAX_SUGGESTIONS), [songs, query]);
+  const { items: suggestions, pending: searching, fallbackMode } = useSuggestions(query, { live, fallback: songs });
   const typed = isQuery(query);
   const open = typed && !dismissed && suggestions.length > 0;
-  const noMatches = typed && suggestions.length === 0;
+  const noMatches = typed && !searching && suggestions.length === 0;
+  // The live search is down: a typed title is guessed as it is.
+  const typedGuesses = live && fallbackMode;
+  const covers = live && !fallbackMode;
   const activeId = open && highlight !== null && highlight < suggestions.length ? optionId(suggestions[highlight]) : undefined;
 
   // Focus stays in the input, so the browser does not scroll to the active option by itself;
@@ -70,7 +77,12 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
   // it: the round's own message or the key's verdict must not be overwritten by a stale
   // suggestion count, and a closed list or a box the player has left has no count to announce.
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Live: the count is due once the results for the typed text arrive, ANNOUNCE_DELAY after the
+  // last key at the earliest.
+  const countDue = useRef(false);
+  const lastKey = useRef(0);
   const cancelPending = useCallback(() => {
+    countDue.current = false;
     if (pending.current !== null) {
       clearTimeout(pending.current);
       pending.current = null;
@@ -90,6 +102,12 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
     shown.current = null;
   };
 
+  const sayCount = (count: number) => {
+    if (count === 0) say(typedGuesses ? t('guess.typedHint') : t('guess.noMatches'));
+    else if (count === 1) say(t('live.suggestionOne'));
+    else say(t('live.suggestions', { count }));
+  };
+
   const onChangeText = (value: string) => {
     setQuery(value);
     setHighlight(null);
@@ -99,14 +117,30 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
       takeBack();
       return;
     }
+    if (live) {
+      countDue.current = true;
+      lastKey.current = Date.now();
+      return;
+    }
     const count = searchSongs(songs, value, MAX_SUGGESTIONS).length;
     pending.current = setTimeout(() => {
       pending.current = null;
-      if (count === 0) say(t('guess.noMatches'));
-      else if (count === 1) say(t('live.suggestionOne'));
-      else say(t('live.suggestions', { count }));
+      sayCount(count);
     }, ANNOUNCE_DELAY);
   };
+
+  const sayCountRef = useRef(sayCount);
+  sayCountRef.current = sayCount;
+  useEffect(() => {
+    if (!live || searching || !countDue.current || !isQuery(query)) return;
+    countDue.current = false;
+    const count = suggestions.length;
+    if (pending.current !== null) clearTimeout(pending.current);
+    pending.current = setTimeout(() => {
+      pending.current = null;
+      sayCountRef.current(count);
+    }, Math.max(0, lastKey.current + ANNOUNCE_DELAY - Date.now()));
+  }, [live, searching, suggestions, query]);
 
   const submit = (song: Song) => {
     cancelPending();
@@ -119,7 +153,7 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
   };
 
   // Enter and the Guess button: the highlighted option, else the only suggestion, else an
-  // exactly typed song; otherwise the no-match notice.
+  // exactly typed song, else (live search down) the typed text; otherwise the no-match notice.
   const submitTyped = () => {
     cancelPending();
     if (open && highlight !== null && highlight < suggestions.length) {
@@ -130,8 +164,9 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
       submit(suggestions[0]);
       return;
     }
-    const match = findExactMatch(songs, query);
+    const match = findExactMatch(live ? suggestions : songs, query);
     if (match !== null) submit(match);
+    else if (typedGuesses && isQuery(query)) submit(textGuess(query));
     else say(t('guess.noMatches'));
   };
 
@@ -246,13 +281,18 @@ export function GuessCombobox({ songs, nextSeconds, isLastGuess, onGuess, onSkip
                   highlighted && styles.optionHighlighted,
                 ]}
               >
+                {covers && song.artworkUrl !== '' && (
+                  <Image source={{ uri: song.artworkUrl }} aria-hidden style={styles.cover} />
+                )}
                 <Text style={styles.optionText}>{songLabel(song)}</Text>
               </Pressable>
             );
           })}
         </View>
       )}
-      {noMatches && <Text style={styles.noMatches}>{t('guess.noMatches')}</Text>}
+      {noMatches && (
+        <Text style={styles.noMatches}>{typedGuesses ? t('guess.typedHint') : t('guess.noMatches')}</Text>
+      )}
       {isLastGuess && (
         <Text nativeID={LAST_WARNING_ID} style={styles.hidden}>
           {t('guess.lastWarning')}
@@ -299,7 +339,9 @@ function makeStyles(theme: Theme) {
     // gets the fill alone. Long titles wrap instead of losing their end.
     option: {
       minHeight: 44,
-      justifyContent: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderWidth: 2,
@@ -308,7 +350,8 @@ function makeStyles(theme: Theme) {
     },
     optionHovered: { backgroundColor: theme.surfaceHover },
     optionHighlighted: { backgroundColor: theme.surfaceHover, borderColor: theme.activeRow },
-    optionText: { ...text(15), color: theme.text },
+    optionText: { ...text(15), color: theme.text, flexShrink: 1 },
+    cover: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: theme.surfaceHover },
     noMatches: { ...text(13, '500'), color: theme.textSecondary, paddingHorizontal: 4 },
     // Read by assistive technology through aria-describedby, not shown.
     hidden: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
