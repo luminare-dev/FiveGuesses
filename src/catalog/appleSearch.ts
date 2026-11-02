@@ -1,5 +1,6 @@
 import { artistNames, compact, coreTitle } from '../game';
 import type { Song } from '../game';
+import { appleLimiter } from './itunes';
 
 export const SEARCH_URL = 'https://itunes.apple.com/search';
 const MAX_ITEMS = 8;
@@ -65,6 +66,8 @@ export function toSuggestions(results: readonly Result[]): Song[] {
 // The browser asks Apple directly (the answer allows any origin), under the player's own limit.
 export async function searchApple(query: string, signal?: AbortSignal): Promise<Song[]> {
   const params = new URLSearchParams({ term: query, media: 'music', entity: 'song', limit: '20', country: 'AT' });
+  // Counted against the page's iTunes limit, so matching a list never pushes the page over it.
+  appleLimiter.note();
   const response = await fetch(`${SEARCH_URL}?${params.toString()}`, { signal });
   if (!response.ok) throw new SearchError(response.status);
   // Apple labels the JSON text/javascript, so it is parsed from the text.

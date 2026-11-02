@@ -1,10 +1,11 @@
 // A room server for the browser tests: the real rules of api/src/rules.mjs behind
-// page.routeWebSocket, with the I/O of api/src/room.mjs reduced to what a test needs. Nothing
-// leaves the machine. Bots are seats without a socket that a test moves itself.
+// page.routeWebSocket, with the I/O of api/src/room.mjs reduced to what a test needs, plus the
+// category and iTunes answers the host's browser needs to build a game. Nothing leaves the
+// machine. Bots are seats without a socket that a test moves itself.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import { AUDIO_HOST, ARTWORK_HOST, ORIGIN } from './fixtures';
+import { API_HOST, AUDIO_HOST, ARTWORK_HOST, CORS, ORIGIN, SEARCH_HOST } from './fixtures';
 
 export const ROOM_CODE = 'ABC234';
 export const ROOM_WS = 'wss://api.fiveguesses.app/api/rooms/*/ws';
@@ -45,12 +46,86 @@ export function searchAnswer(tracks: readonly Track[]): string {
   return JSON.stringify({
     resultCount: tracks.length,
     results: tracks.map((t) => ({
+      wrapperType: 'track',
       trackId: t.id,
       artistName: t.artist,
       trackName: t.title,
+      previewUrl: t.previewUrl,
       artworkUrl100: t.artworkUrl.replace('512x512bb', '100x100bb'),
+      trackViewUrl: t.appleMusicUrl,
     })),
   });
+}
+
+// The answer of iTunes lookup for the asked ids among these tracks, as the browser gets it.
+export function lookupAnswer(tracks: readonly Track[], ids: readonly string[]): string {
+  const results = tracks
+    .filter((t) => ids.includes(String(t.id)))
+    .map((t) => ({
+      wrapperType: 'track',
+      kind: 'song',
+      trackId: t.id,
+      artistName: t.artist,
+      trackName: t.title,
+      previewUrl: t.previewUrl,
+      artworkUrl100: t.artworkUrl.replace('512x512bb', '100x100bb'),
+      trackViewUrl: t.appleMusicUrl,
+    }));
+  return JSON.stringify({ resultCount: results.length, results });
+}
+
+// The iTunes top-songs feed (legacy RSS as JSON) with these tracks.
+export function chartAnswer(tracks: readonly Track[]): string {
+  return JSON.stringify({
+    feed: {
+      entry: tracks.map((t) => ({
+        'im:name': { label: t.title },
+        'im:artist': { label: t.artist },
+        'im:image': [{ label: t.artworkUrl.replace('512x512bb', '170x170bb'), attributes: { height: '170' } }],
+        id: { label: t.appleMusicUrl, attributes: { 'im:id': String(t.id) } },
+        link: [
+          { attributes: { rel: 'alternate', type: 'text/html', href: t.appleMusicUrl } },
+          { attributes: { rel: 'enclosure', type: 'audio/x-m4a', href: t.previewUrl } },
+        ],
+      })),
+    },
+  });
+}
+
+const json = (body: unknown) => ({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(body) });
+
+// iTunes as the browser sees it for these tracks: search, lookup and the top-songs feed.
+export async function routeApple(target: { route: Page['route'] }, tracks: readonly Track[]): Promise<URL[]> {
+  const seen: URL[] = [];
+  await target.route(
+    (url) => url.host === SEARCH_HOST,
+    (route) => {
+      const url = new URL(route.request().url());
+      seen.push(url);
+      const body = url.pathname === '/lookup'
+        ? lookupAnswer(tracks, (url.searchParams.get('id') ?? '').split(','))
+        : url.pathname.includes('/rss/topsongs/')
+          ? chartAnswer(tracks)
+          : searchAnswer(tracks);
+      return route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body });
+    }
+  );
+  return seen;
+}
+
+// The song service's category entries for these tracks (no previews, as the service sends them).
+export async function routePool(target: { route: Page['route'] }, tracks: readonly Track[], label = '1980s'): Promise<void> {
+  await target.route(
+    (url) => url.host === API_HOST && url.pathname === '/api/pool',
+    (route) =>
+      route.fulfill(
+        json({
+          source: new URL(route.request().url()).searchParams.get('source'),
+          label,
+          entries: tracks.map((t) => ({ id: t.id, artist: t.artist, title: t.title, country: t.country })),
+        })
+      )
+  );
 }
 
 type Result = {
@@ -59,15 +134,12 @@ type Result = {
   close?: { id: string; code: number }[];
   seat?: string;
   closeSelf?: number;
-  send?: { id: string; msg: unknown }[];
-  start?: { rounds: number; source: { kind: string; id?: string; label?: string } };
   wipe?: boolean;
 };
 
 type Rules = {
   createRoom: (code: string, now: number) => unknown;
   handle: (room: unknown, sock: { pid: string | null }, msg: unknown, now: number, newId: () => string) => Result;
-  beginGame: (room: unknown, start: { label: string; tracks: Track[]; rounds: number }, now: number) => Result;
   disconnect: (room: unknown, pid: string, now: number) => Result;
   view: (room: unknown, pid: string | null) => unknown;
 };
@@ -99,13 +171,17 @@ export class FakeRoom {
     this.tracks = tracks;
   }
 
-  // An open room, or (exists false) a code the server does not know.
+  // An open room, or (exists false) a code the server does not know. The tracks are the songs
+  // the category and iTunes stubs of attach() offer.
   static async create(tracks: Track[], exists = true): Promise<FakeRoom> {
     const r = await loadRules();
     return new FakeRoom(r, exists ? r.createRoom(ROOM_CODE, Date.now()) : null, tracks);
   }
 
+  // The room socket plus the category and iTunes answers for the host's browser.
   async attach(page: Page): Promise<void> {
+    await routePool(page, this.tracks);
+    await routeApple(page, this.tracks);
     await page.routeWebSocket(ROOM_WS, (ws) => this.accept(ws));
   }
 
@@ -166,9 +242,8 @@ export class FakeRoom {
       }
       const message = JSON.parse(String(data)) as Record<string, unknown>;
       this.received.push({ socket: index, message });
-      const res = this.rules.handle(this.room, { pid: socket.pid }, message, Date.now(), () => this.newId());
+      const res = this.rules.handle(this.room, { pid: socket.pid }, this.inOrder(message), Date.now(), () => this.newId());
       this.apply(res, socket);
-      if (res.start) this.begin(res.start);
     });
     ws.onClose(() => {
       const pid = socket.pid;
@@ -180,9 +255,16 @@ export class FakeRoom {
     });
   }
 
-  private begin(start: NonNullable<Result['start']>): void {
-    const label = start.source.kind === 'category' ? '1980s' : (start.source.label ?? '');
-    this.apply(this.rules.beginGame(this.room, { label, tracks: this.tracks, rounds: start.rounds }, Date.now()), null);
+  // The host's browser shuffles the songs; the fake puts them back in the order of create(), so
+  // a test knows the answer of every round.
+  private inOrder(message: Record<string, unknown>): Record<string, unknown> {
+    if (message.t !== 'start' || !Array.isArray(message.tracks)) return message;
+    const rank = (t: { id?: unknown }) => {
+      const at = this.tracks.findIndex((x) => x.id === t.id);
+      return at === -1 ? this.tracks.length : at;
+    };
+    const tracks = [...(message.tracks as { id?: unknown }[])].sort((a, b) => rank(a) - rank(b));
+    return { ...message, tracks };
   }
 
   private apply(res: Result, socket: Socket | null): void {
@@ -194,9 +276,6 @@ export class FakeRoom {
     }
     if (socket !== null && res.reply !== undefined) FakeRoom.send(socket, res.reply);
     if (socket !== null && res.closeSelf !== undefined) this.close(socket, res.closeSelf);
-    for (const m of res.send ?? []) {
-      for (const s of this.sockets) if (s.pid === m.id) FakeRoom.send(s, m.msg);
-    }
     this.room = res.room;
     if (res.wipe || this.room === null) return;
     for (const s of this.sockets) FakeRoom.send(s, { t: 'room', room: this.rules.view(this.room, s.pid) });

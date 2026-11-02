@@ -1,7 +1,8 @@
 import type { Entry } from '../api';
 
 export const MAX_LINES = 2000;
-export const SAMPLE_SIZE = 30;
+// Entries matched per import: one iTunes search each, about a minute of the player's limit.
+export const SAMPLE_SIZE = 20;
 const MAX_FIELD = 200;
 
 const NUMBERING = /^\s*\d{1,4}\s*[.)]\s+/;

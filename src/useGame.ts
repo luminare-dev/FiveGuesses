@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { getTracks } from './api';
 import type { Track } from './api';
 import type { SnippetView } from './audio/snippetLogic';
 import { useSnippetPlayer } from './audio/useSnippetPlayer';
+import { loadSongs } from './catalog/sources';
 import { SITE_HOST } from './config';
 import { pickFreePlayIndex } from './freePlay';
 import { dailySongIndex, MAX_GUESSES, SNIPPET_SECONDS, songLabel } from './game';
@@ -348,7 +348,7 @@ export function useGame(options: GameOptions = {}): Game {
         let tracks: Track[] = [];
         if (current.id !== null) {
           try {
-            tracks = (await getTracks(current.id, POOL_SIZE, current.played.slice(-EXCLUDE_MAX))).tracks;
+            tracks = (await loadSongs(current.id, POOL_SIZE, current.played.slice(-EXCLUDE_MAX))).tracks;
           } catch {
             tracks = [];
           }
@@ -393,7 +393,7 @@ export function useGame(options: GameOptions = {}): Game {
         let tracks: Track[];
         try {
           if (choice.kind === 'category') {
-            const list = await getTracks(choice.id, POOL_SIZE);
+            const list = await loadSongs(choice.id, POOL_SIZE);
             label = list.label || label;
             tracks = list.tracks;
           } else {

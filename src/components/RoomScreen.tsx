@@ -4,11 +4,13 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { focusWasDropped } from '../a11y/focus';
 import { useAnnouncer } from '../a11y/useAnnouncer';
 import { useSnippetPlayer } from '../audio/useSnippetPlayer';
+import type { Track } from '../api';
+import { loadSongs, shuffle } from '../catalog/sources';
 import { MAX_GUESSES, SNIPPET_SECONDS, songLabel } from '../game';
 import type { Song } from '../game';
 import { t } from '../i18n';
 import type { ClosedReason } from '../rooms/reconnect';
-import { DEFAULT_ROUNDS, DEFAULT_SOURCE } from '../rooms/types';
+import { DEFAULT_ROUNDS, DEFAULT_SOURCE, MAX_POOL } from '../rooms/types';
 import type { GameView, RoomSource, RoomView } from '../rooms/types';
 import { useRoom } from '../rooms/useRoom';
 import { SONGS } from '../songs';
@@ -55,10 +57,6 @@ function closedMessage(reason: ClosedReason): string {
 
 function errorMessage(code: string): string | null {
   switch (code) {
-    case 'source_failed':
-      return t('rooms.error.sourceFailed');
-    case 'source_empty':
-      return t('rooms.error.sourceEmpty');
     case 'slow_down':
       return t('rooms.error.slowDown');
     case 'not_host':
@@ -87,10 +85,16 @@ function subtitle(code: string, view: RoomView | null): string {
   }
 }
 
-function toStart(source: RoomSource) {
-  return source.kind === 'category'
-    ? { kind: 'category' as const, id: source.id }
-    : { kind: 'ids' as const, label: source.label, ids: source.ids };
+// The songs of one game, built by the host's browser: a chart or category is loaded now (the
+// previews from Apple), imported songs are shuffled. Null when loading failed.
+async function gamePool(source: RoomSource, rounds: number): Promise<{ label: string; tracks: Track[] } | null> {
+  try {
+    if (source.kind === 'tracks') return { label: source.label, tracks: shuffle(source.tracks).slice(0, rounds) };
+    const list = await loadSongs(source.id, rounds);
+    return { label: list.label || source.label, tracks: list.tracks };
+  } catch {
+    return null;
+  }
 }
 
 // A duel room at /r/<CODE>: the name form, the lobby, the rounds, the results and the closed
@@ -110,6 +114,9 @@ export function RoomScreen({ code }: Props) {
   const [rounds, setRounds] = useState(DEFAULT_ROUNDS);
   const [source, setSource] = useState<RoomSource>(DEFAULT_SOURCE);
   const [sheet, setSheet] = useState<SheetName>(null);
+  // While the host's browser loads the songs for Start, and why the last attempt failed.
+  const [preparing, setPreparing] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const footerAbout = useRef<View>(null);
   const songsButton = useRef<View>(null);
@@ -190,12 +197,9 @@ export function RoomScreen({ code }: Props) {
     (choice: SourceChoice) => {
       if (choice.kind === 'category') setSource({ kind: 'category', id: choice.id, label: choice.label });
       else if (choice.kind === 'tracks') {
-        setSource({
-          kind: 'ids',
-          label: choice.label.slice(0, 60),
-          ids: choice.tracks.slice(0, 30).map((track) => ({ id: track.id, country: track.country })),
-        });
+        setSource({ kind: 'tracks', label: choice.label.slice(0, 60), tracks: choice.tracks.slice(0, MAX_POOL) });
       }
+      setStartError(null);
       announce(t('rooms.live.songsChosen', { source: choice.kind === 'builtin' ? '' : choice.label }));
     },
     [announce]
@@ -205,7 +209,21 @@ export function RoomScreen({ code }: Props) {
     void resetAllData().then(() => announce(t('about.resetDone')));
   }, [setPreference, announce]);
 
-  const start = () => send({ t: 'start', rounds, source: toStart(source) });
+  const start = () => {
+    if (preparing) return;
+    setPreparing(true);
+    setStartError(null);
+    void gamePool(source, rounds).then((pool) => {
+      setPreparing(false);
+      if (pool === null || pool.tracks.length === 0) {
+        const text = pool === null ? t('rooms.error.sourceFailed') : t('rooms.error.sourceEmpty');
+        setStartError(text);
+        announce(text);
+        return;
+      }
+      send({ t: 'start', rounds, label: pool.label.slice(0, 60) || source.label, tracks: pool.tracks.slice(0, MAX_POOL) });
+    });
+  };
   const guess = (song: Song) =>
     send({ t: 'guess', round: roundNo, id: song.id, artist: song.artist.slice(0, 200), title: song.title.slice(0, 200) });
   const skip = () => send({ t: 'skip', round: roundNo });
@@ -306,8 +324,10 @@ export function RoomScreen({ code }: Props) {
         sourceLabel={source.label}
         onChooseSongs={openSources}
         songsButtonRef={songsButton}
-        startLabel={phase === 'finished' ? t('rooms.playAgain') : t('rooms.start')}
+        startLabel={preparing ? t('rooms.loadingSongs') : phase === 'finished' ? t('rooms.playAgain') : t('rooms.start')}
         onStart={start}
+        busy={preparing}
+        error={startError}
       />
     ) : (
       <Text style={styles.note}>
@@ -330,13 +350,6 @@ export function RoomScreen({ code }: Props) {
             <RoomShare code={code} announce={announce} />
             {settings}
           </View>
-          {players}
-        </>
-      );
-    } else if (phase === 'starting') {
-      body = (
-        <>
-          <View style={styles.card}>{sectionHeading(t('rooms.loadingSongs'))}</View>
           {players}
         </>
       );

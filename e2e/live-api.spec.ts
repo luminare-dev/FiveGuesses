@@ -9,10 +9,14 @@ test('the live song service answers', async ({ request }) => {
   const health = await request.get(`${API}/api/health`);
   expect(await health.json()).toEqual({ ok: true });
   const sources = (await (await request.get(`${API}/api/sources`)).json()) as { sources: unknown[] };
-  expect(sources.sources).toHaveLength(21);
-  const list = (await (await request.get(`${API}/api/tracks?source=80s&n=3`)).json()) as { tracks: { previewUrl: string }[] };
-  expect(list.tracks).toHaveLength(3);
-  for (const track of list.tracks) expect(track.previewUrl).toMatch(/^https:\/\/audio-ssl\.itunes\.apple\.com\//);
+  expect(sources.sources).toHaveLength(17);
+  // Category entries without previews; the browser looks those up at iTunes itself.
+  const pool = (await (await request.get(`${API}/api/pool?source=80s`)).json()) as { entries: { id: number; country: string }[] };
+  expect(pool.entries.length).toBeGreaterThanOrEqual(60);
+  const first = pool.entries.slice(0, 3);
+  const lookup = await request.get(`https://itunes.apple.com/lookup?id=${first.map((e) => e.id).join(',')}&country=${first[0].country}`);
+  const found = JSON.parse(await lookup.text()) as { results: { previewUrl?: string }[] };
+  expect(found.results.some((r) => (r.previewUrl ?? '').startsWith('https://audio-ssl.itunes.apple.com/'))).toBe(true);
   const room = await request.post(`${API}/api/rooms`, { headers: { Origin: 'https://fiveguesses.app' } });
   expect(room.status()).toBe(201);
 });

@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ApiError, getSources, importPlaylist, resolveEntries } from '../api';
+import { ApiError, getSources, importPlaylist } from '../api';
 import type { Entry, SourceInfo, Track } from '../api';
 import { parseCsv, parsePasted, sampleEntries } from '../catalog/importText';
+import { AppleError, lookupTracks, matchEntries } from '../catalog/itunes';
+import type { MatchProgress } from '../catalog/itunes';
+import { chartSources, shuffle } from '../catalog/sources';
 import { t } from '../i18n';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
@@ -25,18 +28,22 @@ type Props = {
 const TITLE_ID = 'sources-title';
 const YOUTUBE_TERMS = 'https://www.youtube.com/t/terms';
 const CSV_MAX_BYTES = 2 * 1024 * 1024;
+// Apple Music ids looked up per import (one request).
+const ID_SAMPLE = 30;
 
 type Lists = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; sources: SourceInfo[] };
 type Work =
   | { state: 'idle' }
   | { state: 'busy' }
+  | { state: 'matching'; progress: MatchProgress }
   | { state: 'failed'; message: string }
-  | { state: 'found'; label: string; tracks: Track[] };
+  | { state: 'found'; label: string; tracks: Track[]; note: string | null };
 
 // The lists change with a deploy only, so one answer per page load is enough.
 let loaded: SourceInfo[] | null = null;
 
 function importError(error: unknown): string {
+  if (error instanceof AppleError) return t('sources.error.apple');
   const code = error instanceof ApiError ? error.code : 'network';
   switch (code) {
     case 'playlist_unsupported':
@@ -46,8 +53,8 @@ function importError(error: unknown): string {
       return t('sources.error.notFound');
     case 'youtube_unavailable':
       return t('sources.error.youtube');
-    case 'apple_unavailable':
-      return t('sources.error.apple');
+    case 'apple_blocked':
+      return t('sources.error.appleBlocked');
     default:
       return t('sources.error.network');
   }
@@ -63,9 +70,10 @@ function groupsOf(sources: readonly SourceInfo[]): { group: string; items: Sourc
   return groups;
 }
 
-// Picks where the songs come from: the built-in list, a category or chart, or an import (a
-// YouTube or Apple Music playlist link, a pasted list, a CSV file). The lists are fetched when
-// the sheet opens; imports are matched to Apple previews by the service, at most 30 songs.
+// Picks where the songs come from: the built-in list, a chart or category, or an import (a
+// YouTube or Apple Music playlist link, a pasted list, a CSV file). The categories are fetched
+// when the sheet opens. The browser asks Apple itself: up to 30 Apple Music ids in one lookup,
+// up to 20 other entries one search at a time under the iTunes limit, with progress and a stop.
 export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -73,9 +81,16 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
   const [work, setWork] = useState<Work>({ state: 'idle' });
   const [link, setLink] = useState('');
   const [pasted, setPasted] = useState('');
+  // The run in progress; stopping it keeps what was found, a closed sheet stops it too.
+  const run = useRef<AbortController | null>(null);
+  useEffect(() => () => run.current?.abort(), []);
 
   useEffect(() => {
-    if (!visible) return undefined;
+    if (!visible) {
+      run.current?.abort();
+      run.current = null;
+      return undefined;
+    }
     setWork({ state: 'idle' });
     if (loaded !== null) {
       setLists({ state: 'ready', sources: loaded });
@@ -101,39 +116,66 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
     onClose();
   };
 
-  const busy = work.state === 'busy';
+  const busy = work.state === 'busy' || work.state === 'matching';
 
-  const resolveList = (entries: Entry[], label: string) => {
+  const begin = (): AbortController => {
+    run.current?.abort();
+    const controller = new AbortController();
+    run.current = controller;
+    return controller;
+  };
+  const finish = (controller: AbortController, next: Work) => {
+    if (run.current !== controller) return;
+    run.current = null;
+    setWork(next);
+  };
+  const found = (label: string, tracks: Track[], note: string | null = null): Work =>
+    tracks.length > 0 ? { state: 'found', label, tracks, note } : { state: 'failed', message: t('sources.error.noMatches') };
+
+  const matchList = (entries: Entry[], label: string, controller = begin()) => {
     if (entries.length === 0) {
-      setWork({ state: 'failed', message: t('sources.error.emptyList') });
+      finish(controller, { state: 'failed', message: t('sources.error.emptyList') });
       return;
     }
-    setWork({ state: 'busy' });
-    resolveEntries(sampleEntries(entries))
-      .then(({ tracks }) =>
-        setWork(
-          tracks.length > 0
-            ? { state: 'found', label, tracks }
-            : { state: 'failed', message: t('sources.error.noMatches') }
-        )
-      )
-      .catch((error: unknown) => setWork({ state: 'failed', message: importError(error) }));
+    const sample = sampleEntries(entries);
+    setWork({ state: 'matching', progress: { done: 0, total: sample.length, found: 0 } });
+    matchEntries(
+      sample,
+      (progress) => {
+        if (run.current === controller) setWork({ state: 'matching', progress });
+      },
+      controller.signal
+    )
+      .then(({ tracks, throttled }) => {
+        if (throttled && tracks.length === 0) finish(controller, { state: 'failed', message: t('sources.error.appleBusy') });
+        else finish(controller, found(label, tracks, throttled ? t('sources.slowedDown') : null));
+      })
+      .catch((error: unknown) => finish(controller, { state: 'failed', message: importError(error) }));
   };
 
   const importLink = () => {
     const url = link.trim();
     if (url === '') return;
+    const controller = begin();
     setWork({ state: 'busy' });
     importPlaylist(url)
-      .then((result) =>
-        setWork(
-          result.tracks.length > 0
-            ? { state: 'found', label: result.label.slice(0, 60) || t('sources.importedLabel'), tracks: result.tracks }
-            : { state: 'failed', message: t('sources.error.noMatches') }
-        )
-      )
-      .catch((error: unknown) => setWork({ state: 'failed', message: importError(error) }));
+      .then(async (result) => {
+        const label = result.label || t('sources.importedLabel');
+        if (result.kind === 'entries') {
+          if (run.current === controller) matchList(result.entries, label, controller);
+          return;
+        }
+        const ids = shuffle(result.items).slice(0, ID_SAMPLE);
+        const tracks = await lookupTracks(
+          ids.map((item) => ({ id: item.id, country: result.country })),
+          controller.signal
+        );
+        finish(controller, found(label, tracks));
+      })
+      .catch((error: unknown) => finish(controller, { state: 'failed', message: importError(error) }));
   };
+
+  const stop = () => run.current?.abort();
 
   // Web only: a file input made for this press, so the browser opens its picker.
   const chooseCsv = () => {
@@ -151,7 +193,7 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
       const label = file.name.replace(/\.csv$/i, '').slice(0, 60) || t('sources.importedLabel');
       file
         .text()
-        .then((content) => resolveList(parseCsv(content), label))
+        .then((content) => matchList(parseCsv(content), label))
         .catch(() => setWork({ state: 'failed', message: t('sources.error.fileUnreadable') }));
     };
     input.click();
@@ -169,10 +211,7 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
       {mode === 'free' && (
         <Button variant="secondary" label={t('sources.builtin')} onPress={() => choose({ kind: 'builtin' })} />
       )}
-      {lists.state === 'loading' && <Text style={styles.note}>{t('sources.listsLoading')}</Text>}
-      {lists.state === 'failed' && <Text style={styles.note}>{t('sources.listsFailed')}</Text>}
-      {lists.state === 'ready' &&
-        groupsOf(lists.sources).map(({ group, items }) => (
+      {groupsOf([...chartSources(), ...(lists.state === 'ready' ? lists.sources : [])]).map(({ group, items }) => (
           <View key={group} style={styles.group}>
             <Text role="heading" aria-level={3} style={styles.groupTitle}>
               {group}
@@ -190,6 +229,8 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
             </View>
           </View>
         ))}
+      {lists.state === 'loading' && <Text style={styles.note}>{t('sources.listsLoading')}</Text>}
+      {lists.state === 'failed' && <Text style={styles.note}>{t('sources.listsFailed')}</Text>}
 
       <View style={styles.group}>
         <Text role="heading" aria-level={3} style={styles.groupTitle}>
@@ -223,7 +264,7 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
         <Button
           variant="secondary"
           label={t('sources.useList')}
-          onPress={() => resolveList(parsePasted(pasted), t('sources.pastedLabel'))}
+          onPress={() => matchList(parsePasted(pasted), t('sources.pastedLabel'))}
           disabled={busy || pasted.trim() === ''}
         />
         {Platform.OS === 'web' && (
@@ -232,14 +273,23 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
         <Text aria-live="polite" style={styles.result}>
           {work.state === 'busy'
             ? t('sources.working')
-            : work.state === 'failed'
-              ? work.message
-              : work.state === 'found'
-                ? work.tracks.length === 1
-                  ? t('sources.foundOne')
-                  : t('sources.found', { count: work.tracks.length })
-                : ''}
+            : work.state === 'matching'
+              ? t('sources.matching', work.progress)
+              : work.state === 'failed'
+                ? work.message
+                : work.state === 'found'
+                  ? work.tracks.length === 1
+                    ? t('sources.foundOne')
+                    : t('sources.found', { count: work.tracks.length })
+                  : ''}
         </Text>
+        {work.state === 'matching' && (
+          <>
+            <Text style={styles.note}>{t('sources.matchingNote')}</Text>
+            <Button variant="secondary" label={t('sources.stop')} onPress={stop} />
+          </>
+        )}
+        {work.state === 'found' && work.note !== null && <Text style={styles.note}>{work.note}</Text>}
         {work.state === 'found' && (
           <Button
             label={t('sources.useFound')}

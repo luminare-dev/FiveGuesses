@@ -1,16 +1,17 @@
 import type { Page } from '@playwright/test';
-import { CORS, awaitSnippet, expect, guess, liveRegion, playButton, setup, test } from './fixtures';
-import { FakeRoom, ROOM_CODE, searchAnswer, serveRoomPages, TAKE_ON_ME, WONDERWALL } from './roomServer';
+import { awaitSnippet, expect, guess, liveRegion, playButton, setup, test } from './fixtures';
+import { FakeRoom, ROOM_CODE, serveRoomPages, TAKE_ON_ME, WONDERWALL } from './roomServer';
 
 const TOKEN = /^[A-Za-z0-9_-]{22}$/;
 
-async function openRoom(page: Page, fake: FakeRoom): Promise<void> {
+// The fake answers the room socket, the category entries and iTunes (search and lookup).
+async function openRoom(page: Page, fake: FakeRoom): Promise<string[]> {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
   await serveRoomPages(page.context());
   await fake.attach(page);
-  await page.route('https://itunes.apple.com/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body: searchAnswer([TAKE_ON_ME, WONDERWALL]) })
-  );
   await page.goto(`/r/${ROOM_CODE}`);
+  return requests;
 }
 
 async function join(page: Page, name: string): Promise<void> {
@@ -24,7 +25,7 @@ const players = (page: Page) => page.getByRole('list', { name: 'Players' }).getB
 test('join by name, play a round against a bot and keep the seat over a reload', async ({ page }) => {
   await setup(page);
   const fake = await FakeRoom.create([TAKE_ON_ME, WONDERWALL]);
-  await openRoom(page, fake);
+  const requests = await openRoom(page, fake);
   await expect(page.getByText(`Room ${ROOM_CODE} · Lobby`)).toBeVisible();
   await join(page, 'Anna');
 
@@ -47,7 +48,20 @@ test('join by name, play a round against a bot and keep the seat over a reload',
 
   await page.getByRole('button', { name: 'Start the game' }).click();
   await expect(page.getByRole('heading', { name: 'Round 1 of 2' })).toBeVisible();
-  expect(fake.messages('start')).toEqual([{ t: 'start', rounds: 10, source: { kind: 'category', id: '80s' } }]);
+  // The host's browser built the game: the category's entries from the service, the previews
+  // from one iTunes lookup, the songs sent with Start.
+  const starts = fake.messages('start');
+  expect(starts).toHaveLength(1);
+  expect(starts[0]).toMatchObject({ t: 'start', rounds: 10, label: '1980s' });
+  expect(starts[0].tracks).toHaveLength(2);
+  expect(starts[0].tracks).toEqual(expect.arrayContaining([TAKE_ON_ME, WONDERWALL]));
+  expect(requests.filter((url) => url.startsWith('https://api.fiveguesses.app/api/pool'))).toEqual([
+    'https://api.fiveguesses.app/api/pool?source=80s',
+  ]);
+  const lookups = requests.filter((url) => url.startsWith('https://itunes.apple.com/lookup')).map((url) => new URL(url));
+  expect(lookups).toHaveLength(1);
+  expect(lookups[0].searchParams.get('country')).toBe('AT');
+  expect(lookups[0].searchParams.get('id')?.split(',').sort()).toEqual([String(TAKE_ON_ME.id), String(WONDERWALL.id)].sort());
   await expect(page.getByText(`Room ${ROOM_CODE} · Round 1 of 2`)).toBeVisible();
   await expect(liveRegion(page)).toHaveText('Round 1 of 2 started. Name the song.');
 
@@ -145,4 +159,16 @@ test('an unknown room says so', async ({ page }) => {
   await openRoom(page, fake);
   await expect(page.getByRole('heading', { name: 'This room does not exist or has closed.' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Your name' })).toHaveCount(0);
+});
+
+test('a category without previews is not started', async ({ page }) => {
+  await setup(page);
+  const fake = await FakeRoom.create([]);
+  await openRoom(page, fake);
+  await join(page, 'Anna');
+  await page.getByRole('button', { name: 'Start the game' }).click();
+  await expect(page.getByText('No songs with a preview were found. Choose other songs.')).toBeVisible();
+  await expect(liveRegion(page)).toHaveText('No songs with a preview were found. Choose other songs.');
+  expect(fake.messages('start')).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Start the game' })).toBeEnabled();
 });

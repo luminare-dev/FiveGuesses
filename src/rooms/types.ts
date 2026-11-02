@@ -2,7 +2,7 @@
 import type { Track } from '../api';
 import type { GuessEntry } from '../game';
 
-export type Phase = 'lobby' | 'starting' | 'playing' | 'reveal' | 'finished';
+export type Phase = 'lobby' | 'playing' | 'reveal' | 'finished';
 export type PlayerStatus = 'playing' | 'won' | 'lost' | 'skipped' | 'out' | 'waiting';
 
 export type PlayerView = {
@@ -47,17 +47,15 @@ export type RoomView = {
   standings: Standing[] | null;
 };
 
+// The host's choice: a chart or category (its songs are loaded on Start) or imported songs.
 export type RoomSource =
   | { kind: 'category'; id: string; label: string }
-  | { kind: 'ids'; label: string; ids: { id: number; country: string }[] };
-
-export type StartSource =
-  | { kind: 'category'; id: string }
-  | { kind: 'ids'; label: string; ids: { id: number; country: string }[] };
+  | { kind: 'tracks'; label: string; tracks: Track[] };
 
 export type ClientMessage =
   | { t: 'hello'; token: string; name?: string }
-  | { t: 'start'; rounds: number; source: StartSource }
+  // The host's browser sends the songs; the room checks every field and never calls Apple.
+  | { t: 'start'; rounds: number; label: string; tracks: Track[] }
   | { t: 'guess'; round: number; id: number; artist: string; title: string }
   | { t: 'skip'; round: number }
   | { t: 'sitOut'; on: boolean }
@@ -77,6 +75,8 @@ export type ServerMessage =
 export const DEFAULT_ROUNDS = 10;
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 20;
+// Songs in one start message (the room's cap).
+export const MAX_POOL = 50;
 export const DEFAULT_SOURCE: RoomSource = { kind: 'category', id: '80s', label: '1980s' };
 
 // Close codes that end the connection for good.

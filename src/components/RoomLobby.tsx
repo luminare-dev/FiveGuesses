@@ -46,6 +46,9 @@ type SettingsProps = {
   songsButtonRef: Ref<View>;
   startLabel: string;
   onStart: () => void;
+  // The host's browser is loading the songs.
+  busy: boolean;
+  error: string | null;
 };
 
 // The host's choices before a game: the number of rounds, the songs, and Start.
@@ -57,6 +60,8 @@ export function RoomSettings({
   songsButtonRef,
   startLabel,
   onStart,
+  busy,
+  error,
 }: SettingsProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -94,7 +99,8 @@ export function RoomSettings({
           style={styles.push}
         />
       </View>
-      <Button label={startLabel} onPress={onStart} />
+      <Button label={startLabel} onPress={onStart} disabled={busy} />
+      {error !== null && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }
@@ -114,6 +120,7 @@ function makeStyles(theme: Theme) {
     label: { ...text(15, '600'), color: theme.text, flexShrink: 1 },
     url: { ...text(15), color: theme.text },
     note: { ...text(13, '500'), color: theme.textSecondary },
+    error: { ...text(14, '600'), color: theme.partial },
     stepper: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
     value: { ...text(17, '700'), ...tabularNums, color: theme.text, minWidth: 28, textAlign: 'center' },
     push: { marginLeft: 'auto' },

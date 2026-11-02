@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import {
-  CORS,
   closeSheet,
   combobox,
   expect,
@@ -15,7 +14,7 @@ import {
   setup,
   test,
 } from './fixtures';
-import { FakeRoom, ROOM_CODE, searchAnswer, serveRoomPages, TAKE_ON_ME } from './roomServer';
+import { FakeRoom, ROOM_CODE, serveRoomPages, TAKE_ON_ME } from './roomServer';
 
 // The policy the apache host sends, read from the file that ships it.
 const HTACCESS = readFileSync(resolve(__dirname, '..', 'public', '.htaccess'), 'utf8');
@@ -95,11 +94,9 @@ test('a room round with the live song search raises no violation under the shipp
   const violations = await enforce(page, csp);
   // Registered last, so it answers the room path before the route above.
   await serveRoomPages(page, { 'content-security-policy': csp });
+  // The fake also answers the category entries and iTunes (lookup and search) for the host.
   const fake = await FakeRoom.create([TAKE_ON_ME]);
   await fake.attach(page);
-  await page.route('https://itunes.apple.com/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body: searchAnswer([TAKE_ON_ME]) })
-  );
 
   const response = await page.goto(`/r/${ROOM_CODE}`);
   expect(response?.headers()['content-security-policy']).toBe(csp);

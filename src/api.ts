@@ -6,8 +6,14 @@ export type Track = Song & { country: string };
 
 export type SourceInfo = { id: string; group: string; label: string };
 export type TrackList = { label: string; tracks: Track[] };
-export type ImportResult = TrackList & { total: number; unresolved: number };
 export type Entry = { artist: string; title: string };
+// A category entry from the song service: an Apple id with the curated names, no preview.
+export type PoolEntry = Entry & { id: number; country: string };
+export type Pool = { label: string; entries: PoolEntry[] };
+// An imported playlist: Apple Music ids (with the link's country) or YouTube entries to match.
+export type ImportResult =
+  | { kind: 'ids'; label: string; country: string; total: number; items: { id: number; title: string }[] }
+  | { kind: 'entries'; label: string; total: number; entries: Entry[] };
 
 // code: the service's error code, or 'network' when no answer came.
 export class ApiError extends Error {
@@ -54,19 +60,31 @@ export async function getSources(): Promise<SourceInfo[]> {
   return Array.isArray(body?.sources) ? body.sources : [];
 }
 
-export async function getTracks(source: string, n: number, exclude: readonly number[] = []): Promise<TrackList> {
-  const params = new URLSearchParams({ source, n: String(n) });
-  if (exclude.length > 0) params.set('exclude', exclude.slice(-100).join(','));
-  const body = await request<TrackList>(`/api/tracks?${params.toString()}`);
-  return { label: body.label, tracks: Array.isArray(body.tracks) ? body.tracks : [] };
+const isText = (value: unknown): value is string => typeof value === 'string' && value !== '';
+const isId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+
+// Every entry of a category; the browser looks up the previews itself.
+export async function getPool(source: string): Promise<Pool> {
+  const body = await request<{ label?: unknown; entries?: unknown }>(`/api/pool?${new URLSearchParams({ source }).toString()}`);
+  const raw = body?.entries;
+  const entries = (Array.isArray(raw) ? (raw as Partial<PoolEntry>[]) : []).filter(
+    (e): e is PoolEntry => isId(e?.id) && isText(e?.artist) && isText(e?.title) && /^[A-Z]{2}$/.test(e?.country ?? '')
+  );
+  return { label: typeof body?.label === 'string' ? body.label : '', entries };
 }
 
-export function importPlaylist(url: string): Promise<ImportResult> {
-  return request<ImportResult>('/api/import', post({ url }), IMPORT_TIMEOUT_MS);
-}
-
-export function resolveEntries(entries: readonly Entry[]): Promise<{ tracks: Track[]; unresolved: number }> {
-  return request<{ tracks: Track[]; unresolved: number }>('/api/resolve', post({ entries }), IMPORT_TIMEOUT_MS);
+export async function importPlaylist(url: string): Promise<ImportResult> {
+  const body = await request<Partial<ImportResult> | null>('/api/import', post({ url }), IMPORT_TIMEOUT_MS);
+  const label = typeof body?.label === 'string' ? body.label.slice(0, 60) : '';
+  if (body?.kind === 'ids' && /^[A-Z]{2}$/.test(body.country ?? '') && Array.isArray(body.items)) {
+    const items = body.items.filter((i) => isId(i?.id)).map((i) => ({ id: i.id, title: typeof i.title === 'string' ? i.title : '' }));
+    return { kind: 'ids', label, country: body.country ?? 'US', total: items.length, items };
+  }
+  if (body?.kind === 'entries' && Array.isArray(body.entries)) {
+    const entries = body.entries.filter((e) => isText(e?.artist) && isText(e?.title));
+    return { kind: 'entries', label, total: entries.length, entries };
+  }
+  throw new ApiError('network');
 }
 
 export async function createRoom(): Promise<string> {
