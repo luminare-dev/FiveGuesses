@@ -40,13 +40,27 @@ export function newCode(getRandomValues = (a) => crypto.getRandomValues(a)) {
   return code;
 }
 
+// Reads at most max bytes, with or without a Content-Length.
 async function readJson(request, max) {
-  const len = Number(request.headers.get('Content-Length') || 0);
-  if (len > max) throw new ApiError(400, 'bad_request');
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > max) throw new ApiError(400, 'bad_request');
+  const len = request.headers.get('Content-Length');
+  if (len != null && !(Number(len) <= max)) throw new ApiError(400, 'bad_request');
+  const body = new Uint8Array(max);
+  let size = 0;
+  if (request.body) {
+    const reader = request.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (size + value.byteLength > max) {
+        reader.cancel().catch(() => {});
+        throw new ApiError(400, 'bad_request');
+      }
+      body.set(value, size);
+      size += value.byteLength;
+    }
+  }
   try {
-    return JSON.parse(text);
+    return JSON.parse(new TextDecoder().decode(body.subarray(0, size)));
   } catch {
     throw new ApiError(400, 'bad_request');
   }
@@ -106,6 +120,14 @@ export async function handle(request, env, deps) {
     return fail(405, 'method_not_allowed', origin, { Allow: `${method}, OPTIONS` });
   }
   if ((method === 'POST' || ws) && !origin) return fail(403, 'origin_forbidden', null);
+
+  // Per IP and route, before any work: RL for the API calls, RL_WS for room connections.
+  const limiter = ws ? env.RL_WS : method === 'POST' || url.pathname === '/api/tracks' ? env.RL : null;
+  if (limiter) {
+    const ip = request.headers.get('CF-Connecting-IP') || '';
+    const { success } = await limiter.limit({ key: `${ip}|${ws ? 'ws' : url.pathname}` });
+    if (!success) return fail(429, 'slow_down', origin, { 'Retry-After': '60' });
+  }
 
   const d = { ...deps, budget: budget() };
   try {

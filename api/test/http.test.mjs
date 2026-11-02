@@ -30,11 +30,27 @@ const deps = (extra = {}) => ({
   ...extra,
 });
 
-const call = (path, { method = 'GET', origin, body, headers = {} } = {}, d = deps()) => {
+const call = (path, { method = 'GET', origin, body, headers = {}, env = {} } = {}, d = deps()) => {
   const h = new Headers(headers);
   if (origin) h.set('Origin', origin);
-  return handle(new Request(BASE + path, { method, headers: h, body }), {}, d);
+  const init = { method, headers: h, body };
+  if (body instanceof ReadableStream) init.duplex = 'half';
+  return handle(new Request(BASE + path, init), env, d);
 };
+
+// A rate limiter that allows the first n calls per key.
+function limiter(n) {
+  const seen = new Map();
+  const rl = {
+    keys: [],
+    limit: async ({ key }) => {
+      rl.keys.push(key);
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+      return { success: seen.get(key) <= n };
+    },
+  };
+  return rl;
+}
 
 test('health without Origin has no CORS headers', async () => {
   const res = await call('/api/health');
@@ -119,6 +135,54 @@ test('body limits and shapes', async () => {
   assert.equal((await post('/api/resolve', JSON.stringify({ entries: [{ artist: 'a'.repeat(201), title: 'x' }] }))).status, 400);
   const big = JSON.stringify({ entries: [entry], pad: 'x'.repeat(17 * 1024) });
   assert.equal((await post('/api/resolve', big)).status, 400);
+});
+
+test('a body without Content-Length is read up to the limit only', async () => {
+  const chunked = (bytes) =>
+    new ReadableStream({
+      start(c) {
+        for (let i = 0; i < bytes; i += 1024) c.enqueue(new TextEncoder().encode('x'.repeat(Math.min(1024, bytes - i))));
+        c.close();
+      },
+    });
+  const res = await call('/api/resolve', { method: 'POST', origin: OK, body: chunked(64 * 1024) });
+  assert.equal(res.status, 400);
+  const small = new ReadableStream({
+    start(c) {
+      c.enqueue(new TextEncoder().encode(JSON.stringify({ url: 'https://example.com/list' })));
+      c.close();
+    },
+  });
+  assert.deepEqual(await (await call('/api/import', { method: 'POST', origin: OK, body: small })).json(), { error: 'playlist_unsupported' });
+  const lying = await call('/api/import', { method: 'POST', origin: OK, body: '{}', headers: { 'Content-Length': '999999' } });
+  assert.equal(lying.status, 400);
+});
+
+test('rate limits per IP and route, before any work', async () => {
+  const RL = limiter(1);
+  const RL_WS = limiter(1);
+  const env = { RL, RL_WS };
+  const headers = { 'CF-Connecting-IP': '203.0.113.7' };
+  const d = deps();
+  assert.equal((await call('/api/rooms', { method: 'POST', origin: OK, headers, env }, d)).status, 201);
+  const res = await call('/api/rooms', { method: 'POST', origin: OK, headers, env }, d);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get('retry-after'), '60');
+  assert.equal(res.headers.get('access-control-allow-origin'), OK);
+  assert.deepEqual(await res.json(), { error: 'slow_down' });
+  assert.equal(d.rooms.calls.length, 1, 'no room made after the limit');
+  assert.equal((await call('/api/rooms', { method: 'POST', origin: OK, headers: { 'CF-Connecting-IP': '203.0.113.8' }, env }, d)).status, 201);
+  const resolve = { method: 'POST', origin: OK, headers, env, body: '{' };
+  assert.equal((await call('/api/resolve', resolve, d)).status, 400);
+  assert.equal((await call('/api/resolve', resolve, d)).status, 429);
+  const ws = { origin: OK, headers: { ...headers, Upgrade: 'websocket' }, env };
+  assert.equal((await call('/api/rooms/ABC234/ws', ws, d)).status, 200);
+  assert.equal((await call('/api/rooms/ABC235/ws', ws, d)).status, 429);
+  assert.equal((await call('/api/tracks?source=nope', { headers, env }, d)).status, 404);
+  assert.equal((await call('/api/tracks?source=nope', { headers, env }, d)).status, 429);
+  assert.equal((await call('/api/health', { headers, env }, d)).status, 200);
+  assert.equal((await call('/api/health', { headers, env }, d)).status, 200);
+  assert.deepEqual(RL_WS.keys, ['203.0.113.7|ws', '203.0.113.7|ws']);
 });
 
 test('room codes', () => {

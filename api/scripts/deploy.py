@@ -35,7 +35,12 @@ def build_metadata(first: bool) -> dict:
     meta = {
         "main_module": "index.mjs",
         "compatibility_date": COMPATIBILITY_DATE,
-        "bindings": [{"type": "durable_object_namespace", "name": "ROOMS", "class_name": "Room"}],
+        "bindings": [
+            {"type": "durable_object_namespace", "name": "ROOMS", "class_name": "Room"},
+            # Per IP: 20 API calls and 60 room connections a minute.
+            {"type": "ratelimit", "name": "RL", "namespace_id": "1001", "simple": {"limit": 20, "period": 60}},
+            {"type": "ratelimit", "name": "RL_WS", "namespace_id": "1002", "simple": {"limit": 60, "period": 60}},
+        ],
         "keep_bindings": ["secret_text"],
         "observability": {"enabled": False},
     }

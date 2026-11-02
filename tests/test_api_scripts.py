@@ -23,8 +23,10 @@ class DeployTest(unittest.TestCase):
             self.assertEqual(meta["main_module"], "index.mjs")
             self.assertEqual(meta["keep_bindings"], ["secret_text"])
             self.assertEqual(
-                meta["bindings"], [{"type": "durable_object_namespace", "name": "ROOMS", "class_name": "Room"}]
+                meta["bindings"][0], {"type": "durable_object_namespace", "name": "ROOMS", "class_name": "Room"}
             )
+            limits = {b["name"]: b["simple"] for b in meta["bindings"] if b["type"] == "ratelimit"}
+            self.assertEqual(limits, {"RL": {"limit": 20, "period": 60}, "RL_WS": {"limit": 60, "period": 60}})
 
     def test_multipart_parts_and_content_types(self):
         parts = deploy.script_parts(False)
