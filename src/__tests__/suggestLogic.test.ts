@@ -1,6 +1,4 @@
 import {
-  BUDGET,
-  BUDGET_WINDOW_MS,
   CACHE_SIZE,
   cached,
   createSession,
@@ -8,19 +6,7 @@ import {
   inFallback,
   markFailed,
   remember,
-  takeBudget,
 } from '../catalog/suggestLogic';
-
-describe('the search budget', () => {
-  it('allows 20 searches in a rolling minute', () => {
-    const session = createSession();
-    for (let i = 0; i < BUDGET; i++) expect(takeBudget(session, 1_000 + i)).toBe(true);
-    expect(takeBudget(session, 2_000)).toBe(false);
-    // The first search leaves the window one minute after it started.
-    expect(takeBudget(session, 1_000 + BUDGET_WINDOW_MS - 1)).toBe(false);
-    expect(takeBudget(session, 1_000 + BUDGET_WINDOW_MS)).toBe(true);
-  });
-});
 
 describe('the fallback window', () => {
   it('lasts a minute after a failure', () => {

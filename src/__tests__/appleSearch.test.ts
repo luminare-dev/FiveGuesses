@@ -1,4 +1,5 @@
 import { searchApple, SearchError, toSuggestions } from '../catalog/appleSearch';
+import { APPLE_PER_MINUTE, appleLimiter } from '../catalog/itunes';
 
 const result = (trackId: number, artistName: string, trackName: string, art = 'https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.jpg') => ({
   trackId,
@@ -88,5 +89,20 @@ describe('searchApple', () => {
     const pending = searchApple('abc', controller.signal);
     controller.abort();
     await expect(pending).rejects.toThrow('aborted');
+  });
+  // Last in the file: it uses up the page's iTunes limit for the minute.
+  it('shares the page iTunes limit: no search once lookups and matching used it up', async () => {
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ results: [] }) }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    // The searches above took their slots too.
+    expect(appleLimiter.wait()).toBe(0);
+    await expect(searchApple('first')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    let taken = 0;
+    while (appleLimiter.tryTake()) taken++;
+    expect(taken).toBeLessThan(APPLE_PER_MINUTE);
+    expect(appleLimiter.wait()).toBeGreaterThan(0);
+    await expect(searchApple('take on')).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -9,7 +9,6 @@ import {
   markFailed,
   remember,
   SEARCH_TIMEOUT_MS,
-  takeBudget,
 } from './catalog/suggestLogic';
 import { normalize, searchSongs } from './game';
 import type { Song } from './game';
@@ -21,7 +20,7 @@ export type Suggestions = {
   items: Song[];
   // A live search for the current text is still on its way; items are the previous ones.
   pending: boolean;
-  // The built-in list answers instead of Apple (offline, a failed search, the budget used up).
+  // The built-in list answers instead of Apple (offline, a failed search, the iTunes limit used up).
   fallbackMode: boolean;
 };
 
@@ -59,13 +58,14 @@ export function useSuggestions(query: string, { live, fallback }: { live: boolea
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const debounce = setTimeout(() => {
-      if (!takeBudget(session, Date.now())) {
-        answerLocally();
-        return;
-      }
       timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
       searchApple(queryRef.current.trim(), controller.signal)
         .then((items) => {
+          // The page's iTunes limit is used up: the built-in list answers, nothing is cached.
+          if (items === null) {
+            if (!stale) answerLocally();
+            return;
+          }
           remember(session, key, items);
           if (!stale) setAnswer({ key, items, fallback: false });
         })

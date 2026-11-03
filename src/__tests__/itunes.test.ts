@@ -240,15 +240,17 @@ describe('RateLimiter', () => {
   it('allows the limit in a window and then waits for the oldest request to age out', () => {
     let now = 1000;
     const limiter = new itunes.RateLimiter(3, 60_000, () => now);
-    limiter.note();
+    expect(limiter.tryTake()).toBe(true);
     now += 10;
-    limiter.note();
+    expect(limiter.tryTake()).toBe(true);
     now += 10;
     expect(limiter.wait()).toBe(0);
-    limiter.note();
+    expect(limiter.tryTake()).toBe(true);
     expect(limiter.wait()).toBe(60_000 - 20);
+    expect(limiter.tryTake()).toBe(false);
     now = 61_000;
     expect(limiter.wait()).toBe(0);
+    expect(limiter.tryTake()).toBe(true);
   });
   it('take() sleeps until a slot is free and can be aborted', async () => {
     const limiter = new itunes.RateLimiter(1, 30);

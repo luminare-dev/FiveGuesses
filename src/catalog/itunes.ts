@@ -69,10 +69,11 @@ export class RateLimiter {
     this.now = now;
   }
 
-  // Counts a request that did not wait for a slot (the guess box's suggestions).
-  note(): void {
-    this.prune();
+  // Takes a slot only when one is free now (the guess box answers from the built-in list instead).
+  tryTake(): boolean {
+    if (this.wait() > 0) return false;
     this.stamps.push(this.now());
+    return true;
   }
 
   // Milliseconds until a slot is free; 0 when one is free now.
