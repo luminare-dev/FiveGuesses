@@ -64,7 +64,7 @@ describe('searchApple', () => {
     }));
     global.fetch = fetchMock as unknown as typeof fetch;
     const items = await searchApple('wonder wall');
-    expect(items.map((s) => s.id)).toEqual([7]);
+    expect(items?.map((s) => s.id)).toEqual([7]);
     const url = new URL(String((fetchMock.mock.calls[0] as unknown[])[0]));
     expect(url.origin + url.pathname).toBe('https://itunes.apple.com/search');
     expect(Object.fromEntries(url.searchParams)).toEqual({
