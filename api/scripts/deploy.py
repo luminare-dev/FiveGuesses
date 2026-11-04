@@ -98,7 +98,9 @@ def wait_for_health(timeout: int = 600) -> bool:
     end = time.time() + timeout
     while time.time() < end:
         try:
-            with urllib.request.urlopen(f"https://{HOST}/api/health", timeout=10) as r:
+            # Cloudflare answers 403 to the default Python-urllib user agent.
+            req = urllib.request.Request(f"https://{HOST}/api/health", headers={"User-Agent": "fiveguesses-deploy/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 if r.status == 200 and json.loads(r.read()) == {"ok": True}:
                     print("health ok", flush=True)
                     return True
