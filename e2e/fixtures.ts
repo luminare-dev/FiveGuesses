@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
 import { test as base, expect } from '@playwright/test';
-import type { BrowserContext, Page, Route } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { dailySongIndex, songLabel } from '../src/game';
 import type { Song } from '../src/game';
 
@@ -88,13 +88,15 @@ function answerThirdParty(route: Route): Promise<void> | false {
   return false;
 }
 
-// Every request and socket of the context that is not for the test server is stubbed here, under
-// whatever a test or setup() routes on top (page routes and later routes come first), so no test
-// reaches the network: the service worker's own requests and a second tab included. Anything
-// else is aborted and listed; the live check (live-api.spec.ts) uses its own request context.
-async function keepOffTheNetwork(context: BrowserContext, blocked: string[]): Promise<void> {
+// Every request and socket of a page that is not for the test server is stubbed here, under
+// whatever a test or setup() routes on top (later routes come first), so no test reaches the
+// network; anything else is aborted and listed. The routes sit on each page, not the context:
+// the service worker only ever fetches the test server (public/sw.js), and a context route would
+// intercept its precache requests too, and closing a context mid-install took the browser down
+// in CI. The live check (live-api.spec.ts) uses its own request context.
+async function keepOffTheNetwork(page: Page, blocked: string[]): Promise<void> {
   const local = new URL(ORIGIN).host;
-  await context.route(
+  await page.route(
     (url) => url.host !== local,
     (route) => {
       const answer = answerThirdParty(route);
@@ -103,8 +105,8 @@ async function keepOffTheNetwork(context: BrowserContext, blocked: string[]): Pr
       return route.abort('blockedbyclient');
     }
   );
-  // A room socket that no FakeRoom answers on its page.
-  await context.routeWebSocket(
+  // A room socket that no FakeRoom answers.
+  await page.routeWebSocket(
     (url) => url.host !== local,
     (ws) => {
       blocked.push(ws.url());
@@ -116,18 +118,31 @@ async function keepOffTheNetwork(context: BrowserContext, blocked: string[]): Pr
 // The one page error the audio stack may log: a pause that lands before play() resolved.
 const TOLERATED_PAGE_ERROR = 'play() request was interrupted';
 
+// The stubs of each page, installed when the page opens (a second tab included).
+const guarded = new WeakMap<Page, Promise<void>>();
+
 // Every test collects page errors; anything but the tolerated message fails the test. Every
 // test also stays off the network; a request that would have left the machine fails it.
 export const test = base.extend<{ pageErrors: string[]; blockedRequests: string[] }>({
   blockedRequests: [
     async ({ context }, use) => {
       const blocked: string[] = [];
-      await keepOffTheNetwork(context, blocked);
+      const guard = (page: Page) => {
+        if (!guarded.has(page)) guarded.set(page, keepOffTheNetwork(page, blocked));
+      };
+      context.on('page', guard);
+      context.pages().forEach(guard);
       await use(blocked);
       expect(blocked, 'requests that would have left the machine').toEqual([]);
     },
     { auto: true },
   ],
+  page: async ({ page, blockedRequests }, use) => {
+    // The stubs are in place before the test's first navigation.
+    if (!guarded.has(page)) guarded.set(page, keepOffTheNetwork(page, blockedRequests));
+    await guarded.get(page);
+    await use(page);
+  },
   pageErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];
@@ -238,10 +253,9 @@ export type RequestLog = {
 };
 
 // Fixes the clock, the media emulation and the online state and starts the request log. The
-// Apple hosts and the song service are stubbed for every test by the fixture on the context (an
-// empty search, the categories, a 503 for the rest of the service), which also answers what a
-// service worker asks for itself (with the switch at the top of this file); a test routes its own
-// answers on top. Call it before the first navigation.
+// Apple hosts and the song service are stubbed on every page by the fixture (an empty search, the
+// categories, a 503 for the rest of the service); a test routes its own answers on top. Call it
+// before the first navigation.
 export async function setup(page: Page, options: SetupOptions = {}): Promise<RequestLog> {
   const {
     time = DEFAULT_TIME,

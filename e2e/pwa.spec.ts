@@ -40,7 +40,7 @@ async function waitForControl(page: Page): Promise<void> {
 }
 
 test('the shell, the saved round and the legal page open offline', async ({ page }) => {
-  // The stubs sit on the context, so a request the worker made itself is stubbed too.
+  // The worker leaves every cross-origin request to the page, so the page stubs answer them.
   const log = await setup(page);
   await page.goto('/');
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
