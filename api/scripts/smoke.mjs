@@ -162,7 +162,7 @@ async function main() {
   ok(Boolean(await c.next(isError('name_taken'))), 'same name again -> name_taken');
   c.close();
 
-  b.put({ t: 'start', rounds: 1, label: '1980s', tracks });
+  b.put({ t: 'start', rounds: 1, label: '1980s', tracks: tracks.slice(0, 1) }); // guests may only send 4 KiB frames
   ok(Boolean(await b.next(isError('not_host'))), 'start from a guest -> not_host');
   a.put({ t: 'start', rounds: 1, label: '1980s', tracks: [{ ...tracks[0], previewUrl: 'https://evil.example/a.m4a' }, ...tracks.slice(1)] });
   ok(Boolean(await a.next(isError('bad_request'))), 'a pool with a foreign preview link -> bad_request');
@@ -182,7 +182,11 @@ async function main() {
 
   for (let i = 0; i < 5; i++) b.put({ t: 'skip', round: 1 });
   const lost = await b.next(isRoom((r) => r.game?.me?.status === 'lost'));
-  ok(Boolean(lost.room.game.answer?.title), `B lost and sees the answer: ${lost.room.game.answer?.artist} - ${lost.room.game.answer?.title}`);
+  ok(lost.room.game.answer === null, 'B is out of guesses; the answer stays hidden while A still plays');
+
+  a.put({ t: 'endRound' });
+  const reveal = await b.next(isRoom((r) => r.game?.answer?.title));
+  ok(Boolean(reveal.room.game.answer.title), `round ended, B sees the answer: ${reveal.room.game.answer.artist} - ${reveal.room.game.answer.title}`);
 
   a.put({ t: 'endGame' });
   const fin = await a.next(isRoom((r) => r.phase === 'finished'));
