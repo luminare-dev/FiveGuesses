@@ -1,5 +1,10 @@
 import {
+  artistNames,
   classifyGuess,
+  coreTitle,
+  guessLabel,
+  sameArtist,
+  textGuess,
   dailySongIndex,
   findExactMatch,
   isCorrect,
@@ -200,5 +205,43 @@ describe('findExactMatch', () => {
     const list = [song(1, 'A', 'Same'), song(2, 'B', 'Same')];
     expect(findExactMatch(list, 'same')).toBeNull();
     expect(findExactMatch(list, 'a same')).toBe(list[0]);
+  });
+});
+
+describe('coreTitle, artistNames and sameArtist', () => {
+  it('drops bracketed groups and everything after a dash', () => {
+    expect(coreTitle('Get Lucky (feat. Pharrell Williams) [Radio Edit]')).toBe('get lucky');
+    expect(coreTitle('Take On Me - 2015 Remaster')).toBe('take on me');
+    expect(coreTitle('(What a Wonderful World)')).toBe('what a wonderful world');
+  });
+  it('splits a credit into names without a leading The', () => {
+    expect(artistNames('Major Lazer, MØ & DJ Snake')).toEqual(['major lazer', 'm', 'dj snake']);
+    expect(artistNames('The Black Eyed Peas')).toEqual(['black eyed peas']);
+    expect(artistNames('Calvin Harris feat. Rihanna')).toEqual(['calvin harris', 'rihanna']);
+    expect(artistNames('Lil Nas X')).toEqual(['lil nas x']);
+  });
+  it('finds a name in common', () => {
+    expect(sameArtist('Black Eyed Peas', 'The Black Eyed Peas')).toBe(true);
+    expect(sameArtist('DJ Snake', 'Major Lazer, MØ & DJ Snake')).toBe(true);
+    expect(sameArtist('Oasis', 'Blur')).toBe(false);
+  });
+});
+
+describe('typed text guesses', () => {
+  const answer = song(5, 'Mark Ronson', 'Uptown Funk (feat. Bruno Mars)');
+  it('count when they name the title, or artist and title', () => {
+    for (const text of ['uptown funk', 'Uptown-Funk', 'mark ronson uptown funk', 'Mark Ronson – Uptown Funk']) {
+      expect(classifyGuess(textGuess(text), answer)).toBe('correct');
+    }
+  });
+  it('are wrong otherwise, never partial', () => {
+    for (const text of ['mark ronson', 'uptown', 'funk uptown', '  ']) {
+      expect(classifyGuess(textGuess(text), answer)).toBe('wrong');
+    }
+  });
+  it('are shown as typed and capped at 200 characters', () => {
+    expect(guessLabel(textGuess('  hello  '))).toBe('hello');
+    expect(textGuess('x'.repeat(300)).title).toHaveLength(200);
+    expect(guessLabel(answer)).toBe('Mark Ronson – Uptown Funk (feat. Bruno Mars)');
   });
 });

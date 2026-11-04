@@ -10,6 +10,11 @@ table is kept in step with `src/game.ts`, `src/config.ts` and `app.json`.
 | `EPOCH` (`src/game.ts`) | date | `2026-08-25` | Puzzle #1 is this day; the number grows by one at every local midnight. |
 | `assets/songs.json` | file | generated | The song list: artist, title, year and the preview, artwork and song-page links from the public iTunes Search API. Regenerate with `node scripts/seed-songs.mjs`; the script is never run by CI. |
 | `EXPO_PUBLIC_SITE_URL` | environment variable, read at build time | `https://fiveguesses.app` | The site address; its host is the last line of the share text (`src/config.ts`). |
+| `EXPO_PUBLIC_API_URL` | environment variable, read at build time | `https://api.fiveguesses.app` | The rooms and song-list service (`api/`); the room WebSocket uses the same host with `wss://`. |
+| `DISCONNECT_GRACE`, `SEAT_TTL` (`api/src/rules.mjs`) | ms | `30000`, `300000` | A room waits 30 s for a dropped player; the seat goes after 5 minutes. |
+| `REVEAL_MS` (`api/src/rules.mjs`) | ms | `10000` | The answer shows this long before the next room round starts. |
+| `IDLE_TTL`, `EMPTY_TTL`, `FINISHED_TTL` (`api/src/rules.mjs`) | ms | 15, 5 and 10 minutes | A room is deleted after this long without activity, without players, or after the results. |
+| `BASE_POINTS`, `PLACE_BONUS` (`api/src/rules.mjs`) | numbers | `100/80/60/40/20`, `30/20/10` | Room points for 1, 2, 4, 8 or 16 seconds, plus the bonus for the first three correct guesses. |
 | `expo.web.name` (`app.json`) | string | `FiveGuesses — daily song guessing` | The page title. |
 | `expo.web.description` (`app.json`) | string | the one-line description from the README | The `description` meta tag of the page. |
 | `expo.web.themeColor` (`app.json`) | colour | `#0A1224` | The `theme-color` meta tag the export appends; the shell's own light and dark values live in `public/index.html`. |
@@ -21,8 +26,12 @@ Secrets never go into this repository, an issue or a log. Pass them through envi
 or a secret store. CI scans every commit with gitleaks; a leaked secret is rotated first and
 removed from history second.
 
-The app needs no secret at run time: it has no backend and no API key. The only secrets belong to
-the deploy workflow (`.github/workflows/deploy.yml`), stored as repository secrets:
+The app itself needs no secret. The worker behind `api.fiveguesses.app` has one, stored as a
+Worker secret by `api/scripts/deploy.py`: `YOUTUBE_API_KEY` (YouTube Data API, playlist import).
+The deploy script reads `CLOUDFLARE_API_TOKEN` from the environment; it is used to deploy only and
+never goes into the repository.
+
+The deploy workflow (`.github/workflows/deploy.yml`) has its own, stored as repository secrets:
 
 | Secret | Holds |
 |---|---|

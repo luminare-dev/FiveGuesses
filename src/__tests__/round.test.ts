@@ -1,5 +1,5 @@
-import { Song, songLabel } from '../game';
-import { GuessEntry, isOver, roundReducer, RoundState, unlockedIndex } from '../round';
+import { Song, songLabel, textGuess } from '../game';
+import { GuessEntry, isOver, roundAnswer, roundReducer, RoundState, unlockedIndex } from '../round';
 import { SONGS } from '../songs';
 
 const byLabel = (label: string): Song => {
@@ -119,5 +119,46 @@ describe('startFree', () => {
     const state = roundReducer(guess(start(), answer), { type: 'startFree', songIndex: 3 }, answer);
     expect(state).toEqual({ mode: 'free', puzzle: null, songIndex: 3, entries: [], status: 'playing' });
     expect(isOver(state)).toBe(false);
+  });
+});
+
+describe('a free round with its own track', () => {
+  const track: Song = {
+    id: 1440783625,
+    artist: 'a-ha',
+    title: 'Take On Me',
+    year: null,
+    matchedTrack: 'Take On Me',
+    matchedArtist: 'a-ha',
+    previewUrl: 'https://audio-ssl.itunes.apple.com/x.m4a',
+    artworkUrl: '',
+    appleMusicUrl: null,
+  };
+  const startTrack = () =>
+    roundReducer(start(), { type: 'startFree', songIndex: -1, track }, answer);
+  const play = (state: RoundState, song: Song) => roundReducer(state, { type: 'guess', song }, roundAnswer(state));
+
+  it('plays the track instead of a built-in song', () => {
+    const state = startTrack();
+    expect(state.track).toBe(track);
+    expect(roundAnswer(state)).toBe(track);
+    expect(roundAnswer(start())).toBe(answer);
+  });
+  it('accepts an Apple version of the title and a typed title', () => {
+    const apple = { ...track, id: 1, title: 'Take On Me (2015 Remaster)' };
+    expect(play(startTrack(), apple).status).toBe('won');
+    const typed = play(startTrack(), textGuess('take on me'));
+    expect(typed.status).toBe('won');
+    expect(typed.entries).toEqual([{ kind: 'correct', text: 'a-ha – Take On Me' }]);
+  });
+  it('shows a wrong typed guess as typed', () => {
+    const state = play(startTrack(), textGuess('  wonderwall '));
+    expect(state.entries).toEqual([{ kind: 'wrong', text: 'wonderwall' }]);
+    expect(unlockedIndex(state)).toBe(1);
+  });
+  it('drops the track for a built-in round', () => {
+    const state = roundReducer(startTrack(), { type: 'startFree', songIndex: 3 }, track);
+    expect(state.track).toBeUndefined();
+    expect(roundAnswer(state)).toBe(SONGS[3]);
   });
 });

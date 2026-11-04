@@ -78,6 +78,24 @@ Run the deploy workflow (or the manual deploy) with the previous tag.
 Shorten IP addresses after at most 7 days and delete logs after at most 5 weeks. The privacy page
 (`/legal/`) states these values, so the server setting must match.
 
+## 8. API (api.fiveguesses.app)
+
+The Worker `fiveguesses-api` (Cloudflare Workers Free, Durable Objects on SQLite) serves the
+category lists, playlist import and rooms. It never calls `itunes.apple.com` (Apple refuses Workers
+there): the browser looks up previews, charts and matches itself, and the host's browser sends a
+room its songs. The account needs a workers.dev subdomain once (open Workers in the dashboard)
+before the first upload.
+
+```sh
+set -a; . /path/to/fiveguesses.env; set +a   # CLOUDFLARE_API_TOKEN, YOUTUBE_API_KEY
+python3 -I api/scripts/deploy.py             # upload, migration, secret, custom domain, health poll
+node api/scripts/smoke.mjs                   # live checks, rooms over WebSocket included
+```
+
+Rollback: check out the previous `api/` and run `deploy.py --no-secret` again. To remove it:
+`DELETE /accounts/{account}/workers/domains/{domain_id}`, then
+`DELETE /accounts/{account}/workers/scripts/fiveguesses-api?force=true`.
+
 ## When things break
 
 - **Site down after a deploy** (403, 500, blank page): roll back, then check that `index.html`,

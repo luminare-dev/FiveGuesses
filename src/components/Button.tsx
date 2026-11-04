@@ -17,6 +17,8 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   ref?: Ref<View>;
   'aria-describedby'?: string;
+  // Only where the visible label needs its context (a player's name) or is a symbol.
+  'aria-label'?: string;
 };
 
 // The shared text button: a filled primary action or an outlined secondary one,

@@ -2,7 +2,7 @@ export type Song = {
   id: number;
   artist: string;
   title: string;
-  year: number;
+  year: number | null;
   matchedTrack: string;
   matchedArtist: string;
   previewUrl: string;
@@ -55,32 +55,86 @@ export function normalize(s: string): string {
 
 // A normalised text without its spaces: "acdc", "aha" and "antihero" then match "AC/DC", "a-ha"
 // and "Anti-Hero", whose marks became word breaks.
-function compact(normalised: string): string {
+export function compact(normalised: string): string {
   return normalised.replace(/ /g, '');
+}
+
+// The title without bracketed groups and without anything after ' - ': "Get Lucky [Radio Edit]"
+// and "Take On Me - 2015 Remaster" are the songs of their seeds. api/src/match.mjs does the same.
+export function coreTitle(title: string): string {
+  const core = normalize(title.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(' - ')[0]);
+  return core || normalize(title);
+}
+
+const ARTIST_SPLIT = /,|&| x | and | featuring | feat\.? | ft\. | with /;
+
+// The names in an artist credit: "Major Lazer, MØ & DJ Snake" -> major lazer, m, dj snake.
+export function artistNames(artist: string): string[] {
+  return artist
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, (m) => ` ${m.slice(1, -1)} `)
+    .split(ARTIST_SPLIT)
+    .map((n) => normalize(n).replace(/^the /, ''))
+    .filter((n) => n !== '');
+}
+
+export function sameArtist(a: string, b: string): boolean {
+  const names = new Set(artistNames(a));
+  return artistNames(b).some((n) => names.has(n));
 }
 
 export function songLabel(s: Song): string {
   return `${s.artist} – ${s.title}`;
 }
 
+// A typed text guess (artist '') names the title, "artist title" or "first artist title".
+function textCorrect(text: string, answer: Song): boolean {
+  const q = compact(normalize(text));
+  if (!q) return false;
+  const core = compact(coreTitle(answer.title));
+  const first = artistNames(answer.artist)[0] ?? '';
+  return q === core || q === compact(normalize(`${answer.artist} ${answer.title}`)) || q === compact(first) + core;
+}
+
 export function isCorrect(guess: Song, answer: Song): boolean {
+  if (guess.artist === '') return textCorrect(guess.title, answer);
   if (guess.id === answer.id) return true;
-  return (
-    normalize(guess.title) === normalize(answer.title) &&
-    normalize(guess.artist) === normalize(answer.artist)
-  );
+  if (normalize(guess.title) === normalize(answer.title) && normalize(guess.artist) === normalize(answer.artist)) {
+    return true;
+  }
+  return coreTitle(guess.title) === coreTitle(answer.title) && sameArtist(guess.artist, answer.artist);
 }
 
 // Right artist, wrong title: counts as a miss but is shown as its own state.
 export function isPartial(guess: Song, answer: Song): boolean {
-  if (isCorrect(guess, answer)) return false;
-  return normalize(guess.artist) === normalize(answer.artist);
+  if (guess.artist === '' || isCorrect(guess, answer)) return false;
+  return sameArtist(guess.artist, answer.artist);
 }
 
 export function classifyGuess(guess: Song, answer: Song): Exclude<GuessKind, 'skip'> {
   if (isCorrect(guess, answer)) return 'correct';
   if (isPartial(guess, answer)) return 'partial';
   return 'wrong';
+}
+
+// A guess typed as text, sent when the live search is unavailable: judged by its words alone.
+export function textGuess(text: string): Song {
+  return {
+    id: 0,
+    artist: '',
+    title: text.trim().slice(0, 200),
+    year: null,
+    matchedTrack: '',
+    matchedArtist: '',
+    previewUrl: '',
+    artworkUrl: '',
+    appleMusicUrl: null,
+  };
+}
+
+// The board text of a guess: the song's label, or the text itself for a typed guess.
+export function guessLabel(song: Song): string {
+  return song.artist === '' ? song.title : songLabel(song);
 }
 
 export function searchSongs(songs: readonly Song[], query: string, limit = 8): Song[] {

@@ -15,7 +15,7 @@
   <body>
     <main>
       <h1>Privacy and legal</h1>
-      <p>Last updated: 21 October 2026</p>
+      <p>Last updated: 2 November 2026</p>
       <p><a href="/">Back to the game</a></p>
 
       <h2>Who runs this site</h2>
@@ -33,6 +33,10 @@
         This site has no accounts and no uploads. It sets no cookies, runs no analytics and does no tracking.
         It loads no fonts and no scripts from other hosts; the font is served from this site.
       </p>
+      <p>
+        When you import your own songs, a CSV file you choose is read in your browser; only up to 30 song lines from it,
+        or from a list you paste, are sent to <code>api.fiveguesses.app</code> to be matched to song previews.
+      </p>
 
       <h2>Data stored in your browser</h2>
       <p>The game keeps its state in your browser's local storage under these keys:</p>
@@ -42,8 +46,12 @@
         <li><code>fg:theme:v1</code>: your theme choice.</li>
       </ul>
       <p>
-        This data never leaves your device. To delete it, open About in the game and choose Reset my data,
+        The local storage data never leaves your device. To delete it, open About in the game and choose Reset my data,
         or clear this site's data in your browser's settings.
+      </p>
+      <p>
+        In a room, the session storage of the tab holds <code>fg:room:&lt;code&gt;</code>: a random seat token for that tab,
+        so a reload keeps your place. It is sent only to <code>api.fiveguesses.app</code> to find your seat and is gone when the tab closes.
       </p>
 
       <h2>Server logs</h2>
@@ -60,10 +68,43 @@
         When you press play, the song preview is loaded from <code>audio-ssl.itunes.apple.com</code>.
         When a round ends, the album artwork is loaded from a host under <code>mzstatic.com</code>.
         The link "Listen on Apple Music" opens <code>music.apple.com</code> in a new tab.
+        In free play and in rooms, the text you type into the guess box is sent to <code>itunes.apple.com</code> for song suggestions,
+        and their covers load from <code>mzstatic.com</code>.
+        When you choose a category or chart, or import songs, your browser asks <code>itunes.apple.com</code> for the previews:
+        it looks up the songs of a category or an Apple Music playlist, reads the iTunes top songs of a country,
+        and searches the artist and title of each imported song (at most 20 songs).
+        Together with the guess box, your browser sends at most 18 of these requests a minute.
         Apple then sees your IP address; Apple's privacy policy is at <a href="https://www.apple.com/legal/privacy/">apple.com/legal/privacy/</a>.
-        These are the only requests to other hosts, and the site's Content-Security-Policy allows no others.
+        Apart from these and <code>api.fiveguesses.app</code> (see below), the site makes no requests to other hosts,
+        and its Content-Security-Policy allows no others.
       </p>
       <p>Previews courtesy of Apple Music.</p>
+
+      <h2>Rooms and playlist import</h2>
+      <p>
+        Rooms, song categories and playlist import use <code>api.fiveguesses.app</code>, which runs on Cloudflare Workers
+        (Cloudflare, Inc.; privacy policy at <a href="https://www.cloudflare.com/privacypolicy/">cloudflare.com/privacypolicy/</a>).
+        Cloudflare processes your IP address to deliver these requests. The service writes no logs of its own and has no accounts.
+      </p>
+      <p>
+        A room holds the names entered, the game progress and the seat tokens only while it exists.
+        It deletes them when the game is over (10 minutes after the results), after 15 minutes without activity,
+        or 5 minutes after everyone left.
+      </p>
+      <p>
+        The service sends the songs of a category (Apple ids, artists and titles) and reads the public Apple Music playlist page
+        of a link you import, so Apple sees the server for that page, not you. It makes no other requests to Apple.
+        To start a game, the host's browser sends the room the songs it found (ids, names and preview and artwork links);
+        the room keeps them only while it exists.
+      </p>
+
+      <h2>YouTube</h2>
+      <p>
+        YouTube playlist import uses YouTube API Services.
+        Our server reads the titles of the playlist you link and keeps nothing; your browser then matches them at <code>itunes.apple.com</code>.
+        By using it you agree to the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>.
+        Google's privacy policy is at <a href="https://policies.google.com/privacy">policies.google.com/privacy</a>.
+      </p>
 
       <h2>Your rights</h2>
       <p>
