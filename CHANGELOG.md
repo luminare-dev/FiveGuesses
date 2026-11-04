@@ -8,6 +8,18 @@ the Conventional Commit titles of the merged pull requests; do not edit entries 
 <!-- release-please inserts each new release above the first line that starts with "## ["
      (or "## " and a digit). Keep the "Origin" entry below as the last entry of this file. -->
 
+## [0.2.0](https://github.com/luminare-dev/FiveGuesses/compare/v0.1.0...v0.2.0) (2026-11-04)
+
+
+### Added
+
+* duel rooms, categories and playlist import ([#5](https://github.com/luminare-dev/FiveGuesses/issues/5)) ([87c12a6](https://github.com/luminare-dev/FiveGuesses/commit/87c12a6b13a5e107a211bc51f8ef1e2171b948fe))
+
+
+### Fixed
+
+* **api:** smoke a small guest start and send a user agent in the deploy health check ([#7](https://github.com/luminare-dev/FiveGuesses/issues/7)) ([ef8a3db](https://github.com/luminare-dev/FiveGuesses/commit/ef8a3db63b0e0aade8fa53040ef0812a3cdaac9f))
+
 ## 0.1.0 (2026-10-26)
 
 
