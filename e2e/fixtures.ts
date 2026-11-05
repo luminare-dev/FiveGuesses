@@ -1,12 +1,12 @@
-// Shared fixtures for the browser tests: a fixed clock, stubbed Apple hosts (an in-memory WAV
-// and a one-pixel PNG, so no request leaves the machine and no binary fixture is committed), an
-// online state that does not depend on the host's network, a request log, the expected daily
-// song from the data, and a few keyboard and pointer helpers.
+// Shared fixtures for the browser tests: a fixed clock, stubbed Apple hosts and song service (an
+// in-memory WAV, a one-pixel PNG and the current categories, so no request leaves the machine and
+// no binary fixture is committed), an online state that does not depend on the host's network, a
+// request log, the expected daily song from the data, and a few keyboard and pointer helpers.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
 import { test as base, expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { dailySongIndex, songLabel } from '../src/game';
 import type { Song } from '../src/game';
 
@@ -33,11 +33,116 @@ export const DEFAULT_TIME = '2026-10-21T08:00:00Z';
 const PUZZLE_ONE_MS = Date.UTC(2026, 7, 25, 8, 0, 0);
 const DAY_MS = 86_400_000;
 
+// The categories of the song service as deployed on 2026-11-04 (api/src/sources.mjs).
+const S = (id: string, group: string, label: string) => ({ id, group, label });
+export const CATEGORIES: readonly { id: string; group: string; label: string }[] = [
+  S('70s', 'Decades', '1970s'),
+  S('80s', 'Decades', '1980s'),
+  S('90s', 'Decades', '1990s'),
+  S('2000s', 'Decades', '2000s'),
+  S('2010s', 'Decades', '2010s'),
+  S('2020s', 'Decades', '2020s'),
+  S('pop', 'Genres', 'Pop'),
+  S('rock', 'Genres', 'Rock'),
+  S('hiphop', 'Genres', 'Hip-Hop/Rap'),
+  S('electronic', 'Genres', 'Electronic/Dance'),
+  S('deutschpop', 'German-language', 'Deutschpop'),
+  S('austropop', 'German-language', 'Austropop'),
+  S('schlager', 'German-language', 'Schlager'),
+  S('soundtracks', 'More', 'Soundtracks (movies and TV)'),
+  S('videogames', 'More', 'Video game music'),
+  S('onehits', 'More', 'One-hit wonders'),
+  S('christmas', 'More', 'Christmas'),
+];
+
+const jsonAnswer = (body: unknown, status = 200) => ({
+  status,
+  contentType: 'application/json',
+  headers: CORS,
+  body: JSON.stringify(body),
+});
+
+// The song service as the stubs give it: the categories and the health check; every other call
+// (pool, import, rooms) is a 503 unless a test routes its own answer on top.
+function answerApi(route: Route): Promise<void> {
+  const { pathname } = new URL(route.request().url());
+  if (pathname === '/api/sources') return route.fulfill(jsonAnswer({ sources: CATEGORIES }));
+  if (pathname === '/api/health') return route.fulfill(jsonAnswer({ ok: true }));
+  return route.fulfill(jsonAnswer({ error: 'stubbed' }, 503));
+}
+
+// The song service down: every call of this page fails with a 503, the categories included.
+export async function serviceDown(page: Page): Promise<void> {
+  await page.route(`https://${API_HOST}/**`, (route) => route.fulfill(jsonAnswer({ error: 'stubbed' }, 503)));
+}
+
+// The stub for a third-party request, or false for a host no test may reach.
+function answerThirdParty(route: Route): Promise<void> | false {
+  const { host } = new URL(route.request().url());
+  if (host === API_HOST) return answerApi(route);
+  if (host === AUDIO_HOST) return route.fulfill({ status: 200, contentType: 'audio/wav', body: silentWav(3) });
+  if (host.endsWith('.mzstatic.com')) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1X1 });
+  if (host === SEARCH_HOST) {
+    return route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body: '{"resultCount":0,"results":[]}' });
+  }
+  return false;
+}
+
+// Every request and socket of a page that is not for the test server is stubbed here, under
+// whatever a test or setup() routes on top (later routes come first), so no test reaches the
+// network; anything else is aborted and listed. The routes sit on each page, not the context:
+// the service worker only ever fetches the test server (public/sw.js), and a context route would
+// intercept its precache requests too, and closing a context mid-install took the browser down
+// in CI. The live check (live-api.spec.ts) uses its own request context.
+async function keepOffTheNetwork(page: Page, blocked: string[]): Promise<void> {
+  const local = new URL(ORIGIN).host;
+  await page.route(
+    (url) => url.host !== local,
+    (route) => {
+      const answer = answerThirdParty(route);
+      if (answer !== false) return answer;
+      blocked.push(route.request().url());
+      return route.abort('blockedbyclient');
+    }
+  );
+  // A room socket that no FakeRoom answers.
+  await page.routeWebSocket(
+    (url) => url.host !== local,
+    (ws) => {
+      blocked.push(ws.url());
+      void ws.close({ code: 1011, reason: 'blocked' }).catch(() => undefined);
+    }
+  );
+}
+
 // The one page error the audio stack may log: a pause that lands before play() resolved.
 const TOLERATED_PAGE_ERROR = 'play() request was interrupted';
 
-// Every test collects page errors; anything but the tolerated message fails the test.
-export const test = base.extend<{ pageErrors: string[] }>({
+// The stubs of each page, installed when the page opens (a second tab included).
+const guarded = new WeakMap<Page, Promise<void>>();
+
+// Every test collects page errors; anything but the tolerated message fails the test. Every
+// test also stays off the network; a request that would have left the machine fails it.
+export const test = base.extend<{ pageErrors: string[]; blockedRequests: string[] }>({
+  blockedRequests: [
+    async ({ context }, use) => {
+      const blocked: string[] = [];
+      const guard = (page: Page) => {
+        if (!guarded.has(page)) guarded.set(page, keepOffTheNetwork(page, blocked));
+      };
+      context.on('page', guard);
+      context.pages().forEach(guard);
+      await use(blocked);
+      expect(blocked, 'requests that would have left the machine').toEqual([]);
+    },
+    { auto: true },
+  ],
+  page: async ({ page, blockedRequests }, use) => {
+    // The stubs are in place before the test's first navigation.
+    if (!guarded.has(page)) guarded.set(page, keepOffTheNetwork(page, blockedRequests));
+    await guarded.get(page);
+    await use(page);
+  },
   pageErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];
@@ -131,9 +236,6 @@ export type SetupOptions = {
   time?: string;
   colorScheme?: 'light' | 'dark';
   reducedMotion?: 'reduce' | 'no-preference';
-  // Where the Apple stubs are installed. 'context' also stubs a request that a service worker
-  // makes itself, which a page route does not see (with the switch at the top of this file).
-  stubScope?: 'page' | 'context';
   // Whether navigator.onLine reads true until goOffline() (the default). The app does not start
   // a preview while it reads false, and Chromium reports false on a machine without a network
   // interface although every request here stays on 127.0.0.1. With false the browser's own
@@ -150,15 +252,15 @@ export type RequestLog = {
   thirdPartyHosts: () => string[];
 };
 
-// Fixes the clock, the media emulation and the online state, stubs the Apple hosts and the room
-// service (an empty search, a 503 for every API call; a test routes its own answers on top) and
-// starts the request log. Call it before the first navigation.
+// Fixes the clock, the media emulation and the online state and starts the request log. The
+// Apple hosts and the song service are stubbed on every page by the fixture (an empty search, the
+// categories, a 503 for the rest of the service); a test routes its own answers on top. Call it
+// before the first navigation.
 export async function setup(page: Page, options: SetupOptions = {}): Promise<RequestLog> {
   const {
     time = DEFAULT_TIME,
     colorScheme = 'dark',
     reducedMotion = 'no-preference',
-    stubScope = 'page',
     pinOnline = true,
   } = options;
   await page.clock.install({ time });
@@ -177,19 +279,6 @@ export async function setup(page: Page, options: SetupOptions = {}): Promise<Req
       });
     });
   }
-  const router = stubScope === 'context' ? page.context() : page;
-  await router.route(`**/${AUDIO_HOST}/**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'audio/wav', body: silentWav(3) })
-  );
-  await router.route('**/*.mzstatic.com/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1X1 })
-  );
-  await router.route(`https://${SEARCH_HOST}/**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'text/javascript', headers: CORS, body: '{"resultCount":0,"results":[]}' })
-  );
-  await router.route(`https://${API_HOST}/**`, (route) =>
-    route.fulfill({ status: 503, contentType: 'application/json', headers: CORS, body: '{"error":"stubbed"}' })
-  );
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
   const serverHost = new URL(ORIGIN).host;

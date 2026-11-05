@@ -167,8 +167,11 @@ test('a category without previews is not started', async ({ page }) => {
   await openRoom(page, fake);
   await join(page, 'Anna');
   await page.getByRole('button', { name: 'Start the game' }).click();
-  await expect(page.getByText('No songs with a preview were found. Choose other songs.')).toBeVisible();
-  await expect(liveRegion(page)).toHaveText('No songs with a preview were found. Choose other songs.');
-  expect(fake.messages('start')).toEqual([]);
+  // The lobby shows the error and the live region repeats it a frame later, so the text is
+  // looked for in each of them, never on the whole page (two matches break strict mode).
+  const empty = 'No songs with a preview were found. Choose other songs.';
+  await expect(page.getByRole('main').getByText(empty)).toBeVisible();
+  await expect(liveRegion(page)).toHaveText(empty);
   await expect(page.getByRole('button', { name: 'Start the game' })).toBeEnabled();
+  expect(fake.messages('start')).toEqual([]);
 });

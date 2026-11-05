@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { CORS, combobox, expect, liveRegion, playSnippet, setup, skip, test } from './fixtures';
+import { CATEGORIES, CORS, combobox, expect, liveRegion, playSnippet, serviceDown, setup, skip, test } from './fixtures';
 import { routeApple, routePool, TAKE_ON_ME, track, WONDERWALL } from './roomServer';
 
 const API = 'https://api.fiveguesses.app';
@@ -73,6 +73,7 @@ test('a category plays its songs, with live suggestions and covers', async ({ pa
 
 test('a chart comes from the iTunes feed in the browser, without the song service', async ({ page }) => {
   await setup(page);
+  await serviceDown(page);
   await routeApple(page, [WONDERWALL]);
   const apple = requestsTo(page, 'itunes.apple.com');
   const service = requestsTo(page, 'api.fiveguesses.app');
@@ -88,8 +89,23 @@ test('a chart comes from the iTunes feed in the browser, without the song servic
   await expect(page.getByRole('img', { name: 'Album artwork for Oasis – Wonderwall' })).toBeVisible();
 });
 
+test('the sheet lists every category of the service by its group', async ({ page }) => {
+  await setup(page);
+  const service = requestsTo(page, 'api.fiveguesses.app');
+  await toReveal(page);
+  const sheet = await openSources(page);
+  for (const group of new Set(CATEGORIES.map((c) => c.group))) {
+    await expect(sheet.getByRole('heading', { name: group, exact: true })).toBeVisible();
+  }
+  for (const { label } of CATEGORIES) {
+    await expect(sheet.getByRole('button', { name: label, exact: true })).toHaveCount(1);
+  }
+  expect(service.map((url) => url.pathname)).toEqual(['/api/sources']);
+});
+
 test('without the song service the sheet offers the built-in songs', async ({ page }) => {
   await setup(page);
+  await serviceDown(page);
   await toReveal(page);
   const sheet = await openSources(page);
   await expect(sheet.getByText('The categories could not be loaded. The charts and your own songs still work.')).toBeVisible();
