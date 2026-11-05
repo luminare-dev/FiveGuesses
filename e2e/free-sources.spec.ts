@@ -213,3 +213,37 @@ test('an Apple Music page that Apple refuses asks for the song list instead', as
   await sheet.getByRole('button', { name: 'Import' }).click();
   await expect(sheet.getByText('Apple blocked this request — paste the song list instead.')).toBeVisible();
 });
+
+test('a Spotify playlist comes back as entries that the browser matches at Apple', async ({ page }) => {
+  await setup(page);
+  const searches = await routeEntrySearch(page);
+  const entries = Array.from({ length: 3 }, (_, i) => ({ artist: `Artist ${i}`, title: `Song ${i}` }));
+  const bodies: unknown[] = [];
+  await page.route(`${API}/api/import`, (route) => {
+    if (route.request().method() === 'POST') bodies.push(route.request().postDataJSON());
+    return route.fulfill(json({ kind: 'entries', label: 'Today’s Top Hits', total: 3, entries }));
+  });
+  await toReveal(page);
+  const sheet = await openSources(page);
+  await expect(sheet.getByPlaceholder('YouTube, Apple Music or Spotify playlist link')).toBeVisible();
+  const link = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc';
+  await sheet.getByRole('textbox', { name: 'Playlist link' }).fill(link);
+  await sheet.getByRole('button', { name: 'Import' }).click();
+  await expect(sheet.getByText('3 songs found')).toBeVisible();
+  expect(bodies).toEqual([{ url: link }]);
+  expect(searches).toHaveLength(3);
+  await sheet.getByRole('button', { name: 'Play these songs' }).click();
+  await expect(page.getByText('Free play · Today’s Top Hits')).toBeVisible();
+});
+
+test('a Spotify page that Spotify refuses points to exportify.net or a pasted list', async ({ page }) => {
+  await setup(page);
+  await page.route(`${API}/api/import`, (route) => route.fulfill(json({ error: 'spotify_blocked' }, 502)));
+  await toReveal(page);
+  const sheet = await openSources(page);
+  await sheet.getByRole('textbox', { name: 'Playlist link' }).fill('spotify:playlist:37i9dQZF1DXcBWIGoYBM5M');
+  await sheet.getByRole('button', { name: 'Import' }).click();
+  await expect(
+    sheet.getByText('Spotify blocked this request — export the playlist with exportify.net or paste the list instead.')
+  ).toBeVisible();
+});

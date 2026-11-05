@@ -10,7 +10,7 @@ export type Entry = { artist: string; title: string };
 // A category entry from the song service: an Apple id with the curated names, no preview.
 export type PoolEntry = Entry & { id: number; country: string };
 export type Pool = { label: string; entries: PoolEntry[] };
-// An imported playlist: Apple Music ids (with the link's country) or YouTube entries to match.
+// An imported playlist: Apple Music ids (with the link's country) or YouTube or Spotify entries to match.
 export type ImportResult =
   | { kind: 'ids'; label: string; country: string; total: number; items: { id: number; title: string }[] }
   | { kind: 'entries'; label: string; total: number; entries: Entry[] };

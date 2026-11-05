@@ -1,5 +1,5 @@
 // Smoke test of the live API (Node 22: global fetch and WebSocket, no dependencies).
-// node api/scripts/smoke.mjs [--base https://api.fiveguesses.app] [--youtube <playlist url>] [--expire]
+// node api/scripts/smoke.mjs [--base https://api.fiveguesses.app] [--youtube <playlist url>] [--spotify <playlist url>] [--expire]
 // The Worker never calls itunes.apple.com; this script plays the browser's part (the iTunes lookup
 // of a category's ids) and sends the room the host's songs, as the app does.
 import { randomBytes } from 'node:crypto';
@@ -13,6 +13,8 @@ const ORIGIN = 'https://fiveguesses.app';
 const APPLE_PLAYLIST = 'https://music.apple.com/us/playlist/top-100-global/pl.d25f5d1181894928af76c85c967f8f31';
 // A public YouTube playlist (YouTube Music "Top 100 Songs Global").
 const YOUTUBE_PLAYLIST = arg('--youtube', 'https://www.youtube.com/playlist?list=PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i');
+// A public Spotify playlist ("Today's Top Hits").
+const SPOTIFY_PLAYLIST = arg('--spotify', 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M');
 
 let failed = 0;
 const ok = (cond, what) => {
@@ -130,6 +132,14 @@ async function main() {
   const yt = await api('/api/import', { method: 'POST', body: JSON.stringify({ url: YOUTUBE_PLAYLIST }) });
   console.log(`info POST /api/import YouTube: ${yt.status} ${yt.status === 200 ? `${yt.body.entries.length} entries of ${yt.body.total}` : yt.body?.error}`);
   ok((yt.status === 200 && yt.body.kind === 'entries') || (yt.status === 503 && yt.body?.error === 'youtube_unavailable'), 'YouTube import answers entries or 503 youtube_unavailable');
+
+  const sp = await api('/api/import', { method: 'POST', body: JSON.stringify({ url: SPOTIFY_PLAYLIST }) });
+  console.log(`info POST /api/import Spotify: ${sp.status} ${sp.status === 200 ? `${sp.body.entries.length} entries of ${sp.body.total}` : sp.body?.error}`);
+  ok(
+    (sp.status === 200 && sp.body.kind === 'entries' && sp.body.entries.length > 0 && sp.body.entries.every((e) => e.artist && e.title)) ||
+      (sp.status === 502 && sp.body?.error === 'spotify_blocked'),
+    'Spotify import answers entries or 502 spotify_blocked',
+  );
 
   // The host's songs, built here as the browser does.
   const picked = entries.slice(0, 25);

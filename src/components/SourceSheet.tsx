@@ -55,6 +55,10 @@ function importError(error: unknown): string {
       return t('sources.error.youtube');
     case 'apple_blocked':
       return t('sources.error.appleBlocked');
+    case 'spotify_unavailable':
+      return t('sources.error.spotify');
+    case 'spotify_blocked':
+      return t('sources.error.spotifyBlocked');
     default:
       return t('sources.error.network');
   }
@@ -71,8 +75,8 @@ function groupsOf(sources: readonly SourceInfo[]): { group: string; items: Sourc
 }
 
 // Picks where the songs come from: the built-in list, a chart or category, or an import (a
-// YouTube or Apple Music playlist link, a pasted list, a CSV file). The categories are fetched
-// when the sheet opens. The browser asks Apple itself: up to 30 Apple Music ids in one lookup,
+// YouTube, Apple Music or Spotify playlist link, a pasted list, a CSV file). The categories are
+// fetched when the sheet opens. The browser asks Apple itself: up to 30 Apple Music ids in one lookup,
 // up to 20 other entries one search at a time under the iTunes limit, with progress and a stop.
 export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Props) {
   const { theme } = useTheme();

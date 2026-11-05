@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "api" / "scripts"))
@@ -27,6 +29,18 @@ class DeployTest(unittest.TestCase):
             )
             limits = {b["name"]: b["simple"] for b in meta["bindings"] if b["type"] == "ratelimit"}
             self.assertEqual(limits, {"RL": {"limit": 20, "period": 60}, "RL_WS": {"limit": 60, "period": 60}})
+
+    def test_spotify_import_is_on_unless_the_environment_says_off(self):
+        def text(value):
+            with mock.patch.dict(os.environ, {} if value is None else {"SPOTIFY_IMPORT": value}, clear=False):
+                if value is None:
+                    os.environ.pop("SPOTIFY_IMPORT", None)
+                meta = deploy.build_metadata(False)
+            return next(b["text"] for b in meta["bindings"] if b["name"] == "SPOTIFY_IMPORT")
+
+        self.assertEqual(text(None), "on")
+        self.assertEqual(text("on"), "on")
+        self.assertEqual(text(" OFF "), "off")
 
     def test_multipart_parts_and_content_types(self):
         parts = deploy.script_parts(False)

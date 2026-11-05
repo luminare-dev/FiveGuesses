@@ -2,6 +2,7 @@
 // the browser looks the ids up and matches the entries itself. The charts live in the client.
 import { ApiError, fetchPlaylistPage, parsePlaylistUrl } from './apple.mjs';
 import { CATEGORY_TRACKS } from './categories.mjs';
+import { fetchSpotifyPlaylist, parsePlaylistUrl as parseSpotifyUrl } from './spotify.mjs';
 import { fetchPlaylist, parsePlaylistUrl as parseYouTubeUrl } from './youtube.mjs';
 
 const S = (id, group, label) => ({ id, group, label });
@@ -37,9 +38,10 @@ export function categoryPool(sourceId) {
   return { source: src.id, label: src.label, entries };
 }
 
-// A YouTube or Apple Music playlist link ->
+// A YouTube, Apple Music or Spotify playlist link ->
 //   { kind: 'ids', label, country, total, items: [{ id, title }] } (Apple Music) or
-//   { kind: 'entries', label, total, entries: [{ artist, title }] } (YouTube).
+//   { kind: 'entries', label, total, entries: [{ artist, title }] } (YouTube, Spotify).
+// SPOTIFY_IMPORT=off turns the Spotify import off (503 spotify_unavailable).
 export async function importPlaylist(url, deps, env) {
   const apple = parsePlaylistUrl(url);
   if (apple) {
@@ -49,6 +51,12 @@ export async function importPlaylist(url, deps, env) {
   const list = parseYouTubeUrl(url);
   if (list) {
     const pl = await fetchPlaylist(list, env.YOUTUBE_API_KEY, deps);
+    return { kind: 'entries', label: pl.label, total: pl.entries.length, entries: pl.entries };
+  }
+  const spotify = parseSpotifyUrl(url);
+  if (spotify) {
+    if (String(env.SPOTIFY_IMPORT ?? '').trim().toLowerCase() === 'off') throw new ApiError(503, 'spotify_unavailable');
+    const pl = await fetchSpotifyPlaylist(spotify, deps);
     return { kind: 'entries', label: pl.label, total: pl.entries.length, entries: pl.entries };
   }
   throw new ApiError(400, 'playlist_unsupported');
