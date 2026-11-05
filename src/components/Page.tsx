@@ -49,8 +49,8 @@ function makeStyles(theme: Theme, twoColumns: boolean) {
     scroll: {
       flexGrow: 1,
       alignItems: 'center',
-      paddingTop: fluid(16, 40),
-      paddingBottom: fluid(20, 40),
+      paddingTop: fluid(16, 32),
+      paddingBottom: fluid(16, 32),
       paddingLeft: gutter(16, 40, 'left'),
       paddingRight: gutter(16, 40, 'right'),
     },

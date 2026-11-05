@@ -21,7 +21,7 @@ type Props = {
   onPlayWithFriends: () => Promise<boolean>;
   // The Choose songs tile; focus returns to it when the song sheet closes.
   chooseButtonRef?: Ref<View>;
-  // One tile per row with its description (a side column), or a grid that drops the
+  // One tile per row with its description (a side column), or two by two, without the
   // descriptions on a narrow phone.
   layout: 'list' | 'grid' | 'compact';
 };
@@ -165,9 +165,9 @@ function makeStyles(theme: Theme, layout: Props['layout']) {
     },
     tiles: { flexDirection: list ? 'column' : 'row', flexWrap: 'wrap', gap: fluid(8, 12) },
     tile: {
-      // Two per row on a phone, four in a row from a tablet, one per row in the side column.
+      // Two by two in one column, one per row in the side column.
       flexGrow: 1,
-      flexBasis: list ? 'auto' : layout === 'compact' ? '40%' : '20%',
+      flexBasis: list ? 'auto' : '40%',
       minHeight: 44,
       minWidth: 0,
       justifyContent: 'center',

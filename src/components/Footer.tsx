@@ -13,35 +13,33 @@ type Props = {
   aboutButtonRef: Ref<View>;
 };
 
-// Two lines on every screen: the previews attribution and the studio line with the project
-// page link, the About opener and the legal page link, at the foot of the page however short it
-// is. The separators are decorative. The buttons and the legal link get a 44 px target around
-// their 12 px text, like every other control; the studio link stays inline in its sentence.
+// Three short lines on every screen, so none of them wraps on a 320 px phone: the previews
+// attribution, the studio line with the project page link, and the About opener with the legal
+// page link, at the foot of the page however short it is. The separator is decorative. The
+// About button and the legal link get a 44 px target around their 13 px text, like every other
+// control; the studio link stays inline in its sentence.
 export function Footer({ onOpenAbout, aboutButtonRef }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   return (
     <View role="contentinfo" style={styles.footer}>
       <Text style={styles.line}>{t('footer.previews')}</Text>
+      <Text style={styles.line}>
+        {tNodes('footer.copyright', {
+          studio: (
+            <Text
+              role="link"
+              href={PROJECT_PAGE_URL}
+              hrefAttrs={{ target: '_blank', rel: 'noopener noreferrer' }}
+              aria-label={t('footer.projectPage')}
+              style={styles.link}
+            >
+              {t('about.studio')}
+            </Text>
+          ),
+        })}
+      </Text>
       <View style={styles.row}>
-        <Text style={styles.line}>
-          {tNodes('footer.copyright', {
-            studio: (
-              <Text
-                role="link"
-                href={PROJECT_PAGE_URL}
-                hrefAttrs={{ target: '_blank', rel: 'noopener noreferrer' }}
-                aria-label={t('footer.projectPage')}
-                style={styles.link}
-              >
-                {t('about.studio')}
-              </Text>
-            ),
-          })}
-        </Text>
-        <Text aria-hidden style={styles.line}>
-          {' · '}
-        </Text>
         <Pressable ref={aboutButtonRef} role="button" onPress={onOpenAbout} style={styles.button}>
           <Text style={[styles.line, styles.link]}>{t('footer.about')}</Text>
         </Pressable>
@@ -58,12 +56,11 @@ export function Footer({ onOpenAbout, aboutButtonRef }: Props) {
 
 function makeStyles(theme: Theme) {
   return StyleSheet.create({
-    footer: { alignSelf: 'stretch', alignItems: 'center', gap: 2, marginTop: 'auto', paddingTop: 8 },
+    footer: { alignSelf: 'stretch', alignItems: 'center', gap: 2, marginTop: 'auto', paddingTop: 4 },
     row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' },
-    line: { ...text(12, '500'), color: theme.textMuted, textAlign: 'center' },
+    line: { ...text(13, '500'), color: theme.textMuted, textAlign: 'center' },
     // Underlined, not told apart by colour alone: the studio link sits inside its sentence.
     link: { color: theme.link, textDecorationLine: 'underline' },
-    // Taller, not wider: the line still fits one row from 390 px.
     button: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
     target: { minHeight: 44, lineHeight: 44 },
   });

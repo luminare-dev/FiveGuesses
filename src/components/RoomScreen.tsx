@@ -498,13 +498,15 @@ export function RoomScreen({ code }: Props) {
 
   return (
     <Page overlay={sheets}>
-      <Header>
-        {connection !== 'closed' && you !== null && (
-          <Button variant="secondary" size="small" label={t('rooms.leave')} onPress={room.leave} />
-        )}
-      </Header>
-      <Text style={styles.subtitle}>{subtitle(code, view)}</Text>
-      <LiveRegion message={message} nonce={nonce} />
+      <View style={styles.top}>
+        <Header>
+          {connection !== 'closed' && you !== null && (
+            <Button variant="secondary" size="small" label={t('rooms.leave')} onPress={room.leave} />
+          )}
+        </Header>
+        <Text style={styles.subtitle}>{subtitle(code, view)}</Text>
+        <LiveRegion message={message} nonce={nonce} />
+      </View>
       {connection === 'connecting' && view !== null && <Text style={styles.note}>{t('rooms.reconnecting')}</Text>}
       {errorText !== null && connection === 'joined' && <Text style={styles.error}>{errorText}</Text>}
       <View role="main" style={styles.main}>
@@ -517,7 +519,8 @@ export function RoomScreen({ code }: Props) {
 
 function makeStyles(theme: Theme, twoColumns: boolean) {
   return StyleSheet.create({
-    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary, marginTop: -8 },
+    top: { alignSelf: 'stretch', gap: 4 },
+    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary },
     main: { alignSelf: 'stretch', gap: fluid(16, 24) },
     // In the two-column layout the lobby card and the players sit side by side.
     columns: {

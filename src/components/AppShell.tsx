@@ -152,11 +152,19 @@ function GameScreen() {
 
   return (
     <Page overlay={sheets}>
-      <Header>
-        <Button ref={statsButton} variant="secondary" size="small" label={t('header.stats')} onPress={openStats} />
-        <Button ref={headerAbout} variant="secondary" size="small" label={t('header.about')} onPress={openAboutFromHeader} />
-      </Header>
-      <LiveRegion message={message} nonce={nonce} />
+      <View style={styles.top}>
+        <Header>
+          <Button ref={statsButton} variant="secondary" size="small" label={t('header.stats')} onPress={openStats} />
+          <Button
+            ref={headerAbout}
+            variant="secondary"
+            size="small"
+            label={t('header.about')}
+            onPress={openAboutFromHeader}
+          />
+        </Header>
+        <LiveRegion message={message} nonce={nonce} />
+      </View>
       <View role="main" aria-busy={!restored} style={styles.main}>
         <View style={styles.side}>
           <ModePicker
@@ -221,6 +229,8 @@ function GameScreen() {
 
 function makeStyles(theme: Theme, twoColumns: boolean, sideWidth: number) {
   return StyleSheet.create({
+    // The header with the live region right below it.
+    top: { alignSelf: 'stretch', gap: 4 },
     // One column, or the modes in a side column left of the game. Both columns start at the top.
     main: {
       alignSelf: 'stretch',
@@ -229,7 +239,13 @@ function makeStyles(theme: Theme, twoColumns: boolean, sideWidth: number) {
       gap: fluid(16, 28),
     },
     side: twoColumns ? { width: sideWidth, flexShrink: 0, gap: fluid(16, 24) } : { alignSelf: 'stretch' },
-    game: { ...card(theme), flex: twoColumns ? 1 : undefined, minWidth: 0, gap: fluid(14, 20) },
+    game: {
+      ...card(theme),
+      alignSelf: twoColumns ? 'flex-start' : 'stretch',
+      flex: twoColumns ? 1 : undefined,
+      minWidth: 0,
+      gap: fluid(14, 18),
+    },
     subtitle: {
       ...text(13, '600'),
       ...tabularNums,
