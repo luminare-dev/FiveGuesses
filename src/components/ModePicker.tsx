@@ -163,7 +163,10 @@ function makeStyles(theme: Theme, layout: Props['layout']) {
       letterSpacing: 1,
       paddingHorizontal: 4,
     },
-    tiles: { flexDirection: list ? 'column' : 'row', flexWrap: 'wrap', gap: fluid(8, 12) },
+    // The side column's tiles stretch to its full width; the grid wraps two by two.
+    tiles: list
+      ? { flexDirection: 'column', alignItems: 'stretch', gap: fluid(8, 12) }
+      : { flexDirection: 'row', flexWrap: 'wrap', gap: fluid(8, 12) },
     tile: {
       // Two by two in one column, one per row in the side column.
       flexGrow: 1,
