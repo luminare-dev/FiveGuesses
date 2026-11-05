@@ -1,5 +1,6 @@
-import type { Page } from '@playwright/test';
-import { expect, openStats, setup, test } from './fixtures';
+import type { Locator, Page } from '@playwright/test';
+import { combobox, expect, openStats, setup, test } from './fixtures';
+import { LONG_SUGGESTIONS, routeApple } from './roomServer';
 
 async function pageWidths(page: Page): Promise<{ scrollWidth: number; innerWidth: number }> {
   return page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
@@ -37,7 +38,7 @@ test('one 328 px column without horizontal scroll at 360 px', async ({ page }) =
 });
 
 // The width of the dialog's card: the outermost ancestor of the title narrower than the layer.
-function sheetCardWidth(dialog: ReturnType<Page['getByRole']>): Promise<number> {
+function sheetCardWidth(dialog: Locator): Promise<number> {
   return dialog.evaluate((root) => {
     const layerWidth = root.getBoundingClientRect().width;
     let card = -1;
@@ -90,7 +91,7 @@ test('the page grows to 1080 px and the text grows with it at 1440 px', async ({
   const box = await main.boundingBox();
   expect(box?.width).toBe(1080);
   expect(box?.x).toBe((1440 - 1080) / 2);
-  const size = (element: ReturnType<Page['getByRole']>) =>
+  const size = (element: Locator) =>
     element.evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
   expect(await size(page.getByRole('heading', { level: 1 }))).toBeCloseTo(32, 0);
   await page.setViewportSize({ width: 360, height: 740 });
@@ -129,4 +130,97 @@ test('the four modes fit two by two with 44 px targets at 320 px', async ({ page
   expect(boxes[0]?.y).toBe(boxes[1]?.y);
   expect(boxes[2]?.y).toBe(boxes[3]?.y);
   expect((boxes[2]?.y ?? 0) > (boxes[0]?.y ?? 0)).toBe(true);
+});
+
+// A free round with eight long live suggestions open in the guess box.
+async function openSuggestions(page: Page, size: { width: number; height: number }) {
+  await setup(page);
+  await page.setViewportSize(size);
+  await routeApple(page, LONG_SUGGESTIONS);
+  await page.goto('/');
+  await page.getByRole('navigation', { name: 'Game modes' }).getByRole('button', { name: 'Free play' }).click();
+  await expect(page.getByText('Free play · Name the song')).toBeVisible();
+  await combobox(page).click();
+  await page.keyboard.type('love');
+  const options = page.getByRole('option');
+  await expect(options).toHaveCount(LONG_SUGGESTIONS.length);
+  return { listbox: page.getByRole('listbox', { name: 'Matching songs' }), options };
+}
+
+// The box of an element, failing the test when it has none.
+async function boxOf(locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  return box ?? { x: 0, y: 0, width: 0, height: 0 };
+}
+
+async function expectInViewport(locator: Locator, size: { width: number; height: number }) {
+  const box = await boxOf(locator);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+}
+
+test('the suggestion list fits a 320 px phone, scrolls inside itself and truncates long names', async ({ page }) => {
+  const size = { width: 320, height: 568 };
+  const { listbox, options } = await openSuggestions(page, size);
+  await expectInViewport(combobox(page), size);
+  await expectInViewport(listbox, size);
+  const { scrollWidth } = await pageWidths(page);
+  expect(scrollWidth).toBeLessThanOrEqual(size.width);
+  const list = await listbox.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+  }));
+  expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  expect(list.overflowY).toBe('auto');
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+
+  // Rows of one height with room for a finger, a square cover and one line each for title and artist.
+  const listBox = await boxOf(listbox);
+  for (const option of await options.all()) {
+    const row = await boxOf(option);
+    expect(row.height).toBeGreaterThanOrEqual(44);
+    expect(row.height).toBeLessThanOrEqual(64);
+    expect(row.x + row.width).toBeLessThanOrEqual(listBox.x + listBox.width);
+    const cover = await boxOf(option.locator('img'));
+    expect(cover.width).toBe(cover.height);
+    expect(cover.width).toBeGreaterThanOrEqual(40);
+    expect(cover.width).toBeLessThanOrEqual(48);
+  }
+  const long = page.getByRole('option', { name: /Concerning Hobbits/ });
+  await expect(long).toHaveAttribute('aria-label', 'Howard Shore, London Philharmonic Orchestra & The London Voices – Concerning Hobbits');
+  const artist = long.getByText(/^Howard Shore/);
+  expect(await artist.evaluate((element) => getComputedStyle(element).textOverflow)).toBe('ellipsis');
+  expect(await artist.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const word = page.getByRole('option', { name: /Supercalifragilistic/ }).getByText('Supercalifragilisticexpialidocious');
+  const wordBox = await boxOf(word);
+  expect(wordBox.x + wordBox.width).toBeLessThanOrEqual(listBox.x + listBox.width);
+
+  // The last option scrolls into the list, which stays where it is.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('End');
+  await expect(options.last()).toHaveAttribute('aria-selected', 'true');
+  await expect(options.last()).toBeInViewport();
+  const last = await boxOf(options.last());
+  expect(last.y + last.height).toBeLessThanOrEqual(listBox.y + listBox.height + 1);
+  await expectInViewport(listbox, size);
+  await expectInViewport(combobox(page), size);
+});
+
+test('with the keyboard up the guess box and its list stay in the visible height', async ({ page }) => {
+  const size = { width: 390, height: 450 };
+  const { listbox, options } = await openSuggestions(page, size);
+  await expectInViewport(combobox(page), size);
+  await expectInViewport(listbox, size);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('End');
+  await expect(options.last()).toBeInViewport();
+  await expectInViewport(combobox(page), size);
+  const { scrollWidth } = await pageWidths(page);
+  expect(scrollWidth).toBeLessThanOrEqual(size.width);
 });
