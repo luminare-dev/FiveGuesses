@@ -86,3 +86,36 @@ test('a free round whose song becomes the next daily song is replaced at midnigh
   await expect(page.getByText('Daily #59 · Name the song')).toBeVisible();
   await expect(page.getByRole('listitem', { name: 'Guess 1: your next guess' })).toHaveCount(1);
 });
+
+test('every mode is open from the start screen, before the daily round is solved', async ({ page }) => {
+  await setup(page);
+  await page.goto('/');
+  const modes = page.getByRole('navigation', { name: 'Game modes' });
+  const dailyTile = modes.getByRole('button', { name: 'Daily song' });
+  const freeTile = modes.getByRole('button', { name: 'Free play' });
+  await expect(dailyTile).toHaveAttribute('aria-current', 'true');
+  await expect(modes.getByRole('button', { name: 'Choose songs' })).toBeEnabled();
+  await expect(modes.getByRole('button', { name: 'Play with friends' })).toBeEnabled();
+
+  // One move on the daily round, then a free round: the daily board waits.
+  await skip(page, 1);
+  await freeTile.click();
+  await expect(page.getByText('Free play · Name the song')).toBeVisible();
+  await expect(freeTile).toHaveAttribute('aria-current', 'true');
+  await expect(dailyTile).not.toHaveAttribute('aria-current', /./);
+  await expect(page.getByRole('listitem', { name: 'Guess 1: your next guess' })).toHaveCount(1);
+  await expect(liveRegion(page)).toHaveText('Free round started. Name the song.');
+  // Focus stays on the tile that was pressed.
+  expect(await activeName(page)).toBe('Free play');
+
+  await dailyTile.click();
+  await expect(page.getByText('Daily #58 · Name the song')).toBeVisible();
+  await expect(page.getByRole('listitem', { name: 'Guess 1: skipped' })).toHaveCount(1);
+  await expect(page.getByRole('listitem', { name: 'Guess 2: your next guess' })).toHaveCount(1);
+
+  // The song sheet opens from the start screen too, and gives focus back to its tile.
+  await modes.getByRole('button', { name: 'Choose songs' }).click();
+  await expect(page.getByRole('dialog', { name: 'Choose songs' })).toBeVisible();
+  await closeSheet(page);
+  await expect.poll(() => activeName(page)).toBe('Choose songs');
+});

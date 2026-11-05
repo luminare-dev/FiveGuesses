@@ -17,7 +17,7 @@ function requestsTo(page: Page, host: string): URL[] {
   return seen;
 }
 
-// The daily round lost, so the result card with its song choices is on screen.
+// The daily round lost, so the result card is on screen.
 async function toReveal(page: Page): Promise<void> {
   await page.goto('/');
   await skip(page, 5);

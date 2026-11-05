@@ -4,7 +4,7 @@ import { GuessEntry, MAX_GUESSES } from '../game';
 import { t } from '../i18n';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
-import { text } from '../theme/typography';
+import { fluid, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 
 type Props = { entries: GuessEntry[]; activeIndex: number | null };
@@ -68,10 +68,10 @@ export function Board({ entries, activeIndex }: Props) {
 
 function makeStyles(theme: Theme) {
   const sheet = StyleSheet.create({
-    board: { gap: 8, alignSelf: 'stretch' },
+    board: { gap: fluid(8, 10), alignSelf: 'stretch' },
     row: {
-      minHeight: 44,
-      borderRadius: radius.sm,
+      minHeight: fluid(44, 52),
+      borderRadius: radius.md,
       borderWidth: 1,
       borderColor: theme.borderStrong,
       backgroundColor: theme.surface,

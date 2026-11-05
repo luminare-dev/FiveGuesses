@@ -221,6 +221,7 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
                 <Button
                   key={source.id}
                   variant="secondary"
+                  size="small"
                   label={source.label}
                   onPress={() => choose({ kind: 'category', id: source.id, label: source.label })}
                   style={styles.sourceButton}
@@ -317,7 +318,8 @@ function makeStyles(theme: Theme) {
     group: { gap: 8 },
     groupTitle: { ...text(15, '700'), color: theme.text, marginTop: 4 },
     buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    sourceButton: { flexGrow: 1, flexBasis: 130 },
+    // Two even columns; a last button on its own keeps the column width.
+    sourceButton: { flexGrow: 0, flexShrink: 0, width: (Platform.OS === 'web' ? 'calc((100% - 8px) / 2)' : '48%') as '48%' },
     note: { ...text(13, '500'), color: theme.textSecondary },
     result: { ...text(14, '600'), color: theme.text, minHeight: 20 },
     link: { color: theme.link, textDecorationLine: 'underline' },

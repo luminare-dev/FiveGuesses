@@ -2,9 +2,10 @@ import React, { useCallback, useMemo } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useReducedMotion } from '../a11y/useReducedMotion';
-import { palette, radius } from '../theme';
+import { palette, radius, withAlpha } from '../theme';
 import type { Theme } from '../theme';
-import { text } from '../theme/typography';
+import { elevation } from '../theme/surface';
+import { display, fluid } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 import { Button } from './Button';
 
@@ -22,14 +23,7 @@ type Props = {
 
 // Below this width the sheet is a full-width card at the bottom; above it a centred card.
 const WIDE = 600;
-const CARD_WIDTH = 480;
-
-// Night at 60 percent, computed from the palette so no colour value lives in a component.
-function withAlpha(hex: string, alpha: number): string {
-  const value = hex.replace('#', '');
-  const channel = (offset: number) => parseInt(value.slice(offset, offset + 2), 16);
-  return `rgba(${channel(0)},${channel(2)},${channel(4)},${alpha})`;
-}
+const CARD_WIDTH = 520;
 
 // A modal dialog named by its heading: the Modal traps focus, closes on Escape and gives focus
 // back on unmount; on top of that the opener is focused once the dialog is gone (onDismiss, on
@@ -92,14 +86,15 @@ function makeStyles(theme: Theme, wide: boolean, height: number) {
       maxHeight: Math.round(height * 0.92),
       backgroundColor: theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
-      borderTopLeftRadius: radius.lg,
-      borderTopRightRadius: radius.lg,
-      borderBottomLeftRadius: wide ? radius.lg : 0,
-      borderBottomRightRadius: wide ? radius.lg : 0,
+      borderColor: theme.cardBorder,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      borderBottomLeftRadius: wide ? radius.xl : 0,
+      borderBottomRightRadius: wide ? radius.xl : 0,
+      ...elevation(theme, true),
     },
-    content: { padding: 20, gap: 12 },
-    title: { ...text(20, '700'), color: theme.text },
+    content: { padding: fluid(20, 28), gap: 12 },
+    title: { ...display(20, '700'), color: theme.text },
     close: { marginTop: 4 },
   });
 }

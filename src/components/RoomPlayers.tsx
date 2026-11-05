@@ -74,6 +74,7 @@ export function RoomPlayers({ players, you, isHost, playing, hostIdle, onSkipPla
                 {skippable && (
                   <Button
                     variant="secondary"
+                    size="small"
                     label={t('rooms.skipTurn')}
                     aria-label={t('rooms.skipTurnFor', { name: player.name })}
                     onPress={() => onSkipPlayer(player.id)}
@@ -82,6 +83,7 @@ export function RoomPlayers({ players, you, isHost, playing, hostIdle, onSkipPla
                 {isHost && (
                   <Button
                     variant="secondary"
+                    size="small"
                     label={t('rooms.remove')}
                     aria-label={t('rooms.removePlayer', { name: player.name })}
                     onPress={() => onKick(player.id)}
@@ -113,7 +115,7 @@ function makeStyles(theme: Theme) {
       paddingVertical: 8,
     },
     rowSelf: { borderColor: theme.borderStrong },
-    info: { flexGrow: 1, flexShrink: 1, flexBasis: 160, gap: 2 },
+    info: { flexGrow: 1, flexShrink: 1, flexBasis: 120, gap: 2 },
     name: { ...text(15, '700'), color: theme.text },
     tags: { ...text(13, '500'), color: theme.textSecondary },
     detail: { ...text(13, '500'), ...tabularNums, color: theme.textSecondary },

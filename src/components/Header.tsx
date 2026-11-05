@@ -1,47 +1,25 @@
 import React, { useMemo } from 'react';
-import type { Ref } from 'react';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { t } from '../i18n';
-import type { RoundMode } from '../round';
 import type { Theme } from '../theme';
-import { display, tabularNums, text } from '../theme/typography';
+import { display, fluid } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
-import { Button } from './Button';
 
 type Props = {
-  mode: RoundMode;
-  // The daily puzzle number; null in free play.
-  puzzle: number | null;
-  // The song source of a free round; null for the built-in songs.
-  source?: string | null;
-  onOpenStats: () => void;
-  onOpenAbout: () => void;
-  // The buttons that open the sheets; focus returns to them when a sheet closes.
-  statsButtonRef: Ref<View>;
-  aboutButtonRef: Ref<View>;
+  // The controls on the right: the sheet openers on the game screen, Leave in a room.
+  children?: ReactNode;
 };
 
-// The wordmark, the subtitle with the puzzle number or the song source and the two sheet openers.
-export function Header({ mode, puzzle, source = null, onOpenStats, onOpenAbout, statsButtonRef, aboutButtonRef }: Props) {
+// The banner: the wordmark on the left and the screen's controls on the right, on one line from
+// 320 px up (the controls wrap below the wordmark only when they do not fit).
+export function Header({ children }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const subtitle =
-    mode === 'daily' && puzzle !== null
-      ? t('app.subtitle.daily', { puzzle })
-      : source !== null
-        ? t('app.subtitle.source', { source })
-        : t('app.subtitle.free');
-
   return (
     <View role="banner" style={styles.header}>
-      <View style={styles.row}>
-        <Wordmark />
-        <View style={styles.buttons}>
-          <Button ref={statsButtonRef} variant="secondary" label={t('header.stats')} onPress={onOpenStats} />
-          <Button ref={aboutButtonRef} variant="secondary" label={t('header.about')} onPress={onOpenAbout} />
-        </View>
-      </View>
-      <Text style={styles.subtitle}>{subtitle}</Text>
+      <Wordmark />
+      {children !== undefined && <View style={styles.buttons}>{children}</View>}
     </View>
   );
 }
@@ -65,17 +43,18 @@ export function Wordmark() {
 
 function makeStyles(theme: Theme) {
   return StyleSheet.create({
-    header: { alignSelf: 'stretch', gap: 6 },
-    row: {
+    header: {
+      alignSelf: 'stretch',
       flexDirection: 'row',
       flexWrap: 'wrap',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: 8,
+      minHeight: 44,
     },
-    wordmark: { ...display(26, '700'), color: theme.text },
+    // 21 px on a phone, so the wordmark and both sheet openers share one line from 360 px.
+    wordmark: { ...display(21, '800'), fontSize: fluid(21, 32), color: theme.text, letterSpacing: -0.4 },
     wordmarkAccent: { color: theme.primary },
-    buttons: { flexDirection: 'row', gap: 8, marginLeft: 'auto' },
-    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary },
+    buttons: { flexDirection: 'row', gap: fluid(6, 10), marginLeft: 'auto' },
   });
 }
