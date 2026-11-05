@@ -6,9 +6,10 @@ also applies.
 
 ## Keyboard
 
-Tab order on the main screen: Statistics, About, the play button, the guess box, Skip, Guess, then
-the footer links. After a round, the reveal adds Listen on Apple Music, Share result and the
-free-round buttons after the play button.
+Tab order on the main screen: Statistics, About, the four game modes (Daily song, Free play,
+Choose songs, Play with friends; the mode in play carries `aria-current`), the play button, the
+guess box, Skip, Guess, then the footer links. After a round, the reveal adds Listen on Apple
+Music, Share result and the free-round buttons after the play button.
 
 | Key in the guess box | List closed | List open |
 |---|---|---|
