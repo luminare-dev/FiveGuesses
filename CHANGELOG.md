@@ -8,6 +8,14 @@ the Conventional Commit titles of the merged pull requests; do not edit entries 
 <!-- release-please inserts each new release above the first line that starts with "## ["
      (or "## " and a digit). Keep the "Origin" entry below as the last entry of this file. -->
 
+## [0.3.0](https://github.com/luminare-dev/FiveGuesses/compare/v0.2.0...v0.3.0) (2026-11-05)
+
+
+### Added
+
+* **api:** import Spotify playlist links from the public embed page ([#11](https://github.com/luminare-dev/FiveGuesses/issues/11)) ([624d782](https://github.com/luminare-dev/FiveGuesses/commit/624d782369a120a29ba8297d4afb9b31e5cb6d8f))
+* modes from the start screen and a cleaner responsive layout ([#9](https://github.com/luminare-dev/FiveGuesses/issues/9)) ([ce011f8](https://github.com/luminare-dev/FiveGuesses/commit/ce011f85399ded4ff2ee19a0e166a7b76947930d))
+
 ## [0.2.0](https://github.com/luminare-dev/FiveGuesses/compare/v0.1.0...v0.2.0) (2026-11-04)
 
 
