@@ -312,11 +312,11 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
                   <Image source={{ uri: song.artworkUrl }} aria-hidden style={styles.cover} />
                 )}
                 <View style={styles.optionText}>
-                  <Text style={styles.optionTitle} numberOfLines={1}>
-                    {song.title}
-                  </Text>
                   <Text style={styles.optionArtist} numberOfLines={1}>
                     {song.artist}
+                  </Text>
+                  <Text style={styles.optionTitle} numberOfLines={1}>
+                    {song.title}
                   </Text>
                 </View>
               </Pressable>
@@ -389,7 +389,9 @@ function makeStyles(theme: Theme) {
     },
     optionHovered: { backgroundColor: theme.surfaceHover },
     optionHighlighted: { backgroundColor: theme.surfaceHover, borderColor: theme.activeRow },
-    optionText: { flex: 1, minWidth: 0 },
+    // The artist comes first in the text, as in the option's name ("artist – title"), and the
+    // title is drawn on top.
+    optionText: { flex: 1, minWidth: 0, flexDirection: 'column-reverse' },
     optionTitle: { ...text(15, '600'), color: theme.text },
     optionArtist: { ...text(13), color: theme.textSecondary },
     cover: { width: 44, height: 44, flexShrink: 0, borderRadius: radius.sm, backgroundColor: theme.surfaceHover },
