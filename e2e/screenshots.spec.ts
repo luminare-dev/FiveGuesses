@@ -1,6 +1,7 @@
 // Screenshots for the visual check, not assertions: the start screen, a daily round, its result,
-// the song sheet and a room lobby, at a phone, a tablet and a desktop size, light and dark. Each
-// shot is taken at the viewport size and, when the page scrolls, once more at the full height.
+// the song sheet and a room lobby, at a phone, a tablet, a desktop and a landscape phone size,
+// light and dark. Each shot is taken at the viewport size and, when the page scrolls, once more
+// at the full height.
 // Runs only with SCREENSHOTS=1 (the "screenshots" step of the web job), into screenshots/.
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -13,6 +14,8 @@ const SIZES = [
   { width: 390, height: 844 },
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
+  // A landscape phone, for the self-review; not part of the required set.
+  { width: 844, height: 390 },
 ] as const;
 const SCHEMES = ['light', 'dark'] as const;
 

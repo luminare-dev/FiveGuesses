@@ -4,14 +4,14 @@ import { t } from '../i18n';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
 import { card } from '../theme/surface';
-import { tabularNums, text } from '../theme/typography';
+import { fluid, tabularNums, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 
-// The rules in four steps, for the side column of the two-column layout.
+// The rules in three steps, for the side column of the two-column layout.
 export function HowTo() {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const steps = [t('howto.listen'), t('howto.guess'), t('howto.double'), t('howto.daily')];
+  const steps = [t('howto.listen'), t('howto.guess'), t('howto.double')];
   return (
     <View style={styles.card}>
       <Text role="heading" aria-level={2} style={styles.title}>
@@ -33,10 +33,10 @@ export function HowTo() {
 
 function makeStyles(theme: Theme) {
   return StyleSheet.create({
-    card: { ...card(theme), gap: 12 },
-    title: { ...text(16, '700'), color: theme.text },
-    list: { gap: 10 },
-    item: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    card: { ...card(theme), padding: fluid(16, 22), gap: 10 },
+    title: { ...text(15, '700'), color: theme.text },
+    list: { gap: 8 },
+    item: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     number: {
       ...text(12, '700'),
       ...tabularNums,
