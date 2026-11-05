@@ -1,13 +1,14 @@
 // Screenshots for the visual check, not assertions: the start screen, a daily round, its result,
 // the song sheet and a room lobby, at a phone, a tablet, a desktop and a landscape phone size,
-// light and dark. Each shot is taken at the viewport size and, when the page scrolls, once more
+// light and dark; and the live suggestions of a free round at phone sizes, the last two with the
+// height the on-screen keyboard leaves. Each shot is taken at the viewport size and, when the page scrolls, once more
 // at the full height.
 // Runs only with SCREENSHOTS=1 (the "screenshots" step of the web job), into screenshots/.
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
-import { combobox, expect, guess, setup, skip, test } from './fixtures';
-import { FakeRoom, ROOM_CODE, serveRoomPages, TAKE_ON_ME, WONDERWALL } from './roomServer';
+import { ARTWORK_HOST, combobox, expect, guess, setup, skip, solidPng, test } from './fixtures';
+import { FakeRoom, LONG_SUGGESTIONS, ROOM_CODE, routeApple, serveRoomPages, TAKE_ON_ME, WONDERWALL } from './roomServer';
 
 const OUT = resolve(__dirname, '..', 'screenshots');
 const SIZES = [
@@ -18,6 +19,18 @@ const SIZES = [
   { width: 844, height: 390 },
 ] as const;
 const SCHEMES = ['light', 'dark'] as const;
+// Phones in portrait, a landscape phone, and two portrait phones with the keyboard up.
+const PHONES = [
+  { width: 320, height: 568 },
+  { width: 375, height: 667 },
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+  { width: 844, height: 390 },
+  { width: 390, height: 450 },
+  { width: 320, height: 360 },
+] as const;
+// A solid cover, so the screenshot shows where each one sits.
+const COVER = solidPng([45, 99, 222, 255]);
 
 test.skip(!process.env.SCREENSHOTS, 'screenshots are taken on their own, with SCREENSHOTS=1');
 test.describe.configure({ mode: 'parallel' });
@@ -95,6 +108,33 @@ for (const size of SIZES) {
       fake.join('Cara');
       await expect(page.getByRole('list', { name: 'Players' }).getByRole('listitem')).toHaveCount(3);
       await shoot(page, '5-room-lobby', size, scheme);
+    });
+  }
+}
+
+for (const size of PHONES) {
+  for (const scheme of SCHEMES) {
+    test(`live suggestions at ${size.width}x${size.height}, ${scheme}`, async ({ page }) => {
+      test.setTimeout(60_000);
+      mkdirSync(OUT, { recursive: true });
+      await setup(page, { colorScheme: scheme, reducedMotion: 'reduce' });
+      await page.setViewportSize(size);
+      await routeApple(page, LONG_SUGGESTIONS);
+      await page.route(
+        (url) => url.host === ARTWORK_HOST,
+        (route) => route.fulfill({ status: 200, contentType: 'image/png', body: COVER })
+      );
+      await page.goto('/');
+      await page.getByRole('navigation', { name: 'Game modes' }).getByRole('button', { name: 'Free play' }).click();
+      await expect(page.getByText('Free play · Name the song')).toBeVisible();
+      await combobox(page).click();
+      await page.keyboard.type('love');
+      await expect(page.getByRole('option')).toHaveCount(LONG_SUGGESTIONS.length);
+      await expect(page.getByRole('option').first().locator('img')).toHaveCount(1);
+      await shoot(page, '6-live-suggestions', size, scheme);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('End');
+      await shoot(page, '7-live-suggestions-last', size, scheme);
     });
   }
 }

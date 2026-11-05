@@ -41,6 +41,19 @@ export function track(id: number, artist: string, title: string): Track {
 export const TAKE_ON_ME = track(1440783625, 'a-ha', 'Take On Me');
 export const WONDERWALL = track(1440842449, 'Oasis', 'Wonderwall');
 
+// Eight live suggestions as Apple returns them for a short query: long titles and artists, one
+// unbroken word, and a cover on every row. For the guess box on a narrow phone.
+export const LONG_SUGGESTIONS: readonly Track[] = [
+  TAKE_ON_ME,
+  track(1440650711, 'Florence + The Machine', 'Dog Days Are Over (Live at the Royal Albert Hall, 2012 Remaster)'),
+  track(1440650712, 'Howard Shore, London Philharmonic Orchestra & The London Voices', 'Concerning Hobbits'),
+  track(1440650713, 'Julie Andrews & Dick Van Dyke', 'Supercalifragilisticexpialidocious'),
+  WONDERWALL,
+  track(1440650714, 'Queen', 'Bohemian Rhapsody - Remastered 2011'),
+  track(1440650715, 'Earth, Wind & Fire', "Let's Groove (Single Version) [feat. The Emotions]"),
+  track(1440650716, 'ABBA', 'Dancing Queen'),
+];
+
 // The answer of iTunes search for these tracks, as the browser gets it.
 export function searchAnswer(tracks: readonly Track[]): string {
   return JSON.stringify({

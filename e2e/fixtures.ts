@@ -185,15 +185,16 @@ function pngChunk(type: string, body: Buffer): Buffer {
   return Buffer.concat([length, typed, crc]);
 }
 
-// A one-pixel transparent PNG, built in memory.
-function png1x1(): Buffer {
+// A one-pixel PNG of this RGBA colour (transparent by default), built in memory. Stretched to a
+// cover's box, a solid one shows where the cover sits in a screenshot.
+export function solidPng(rgba: readonly [number, number, number, number] = [0, 0, 0, 0]): Buffer {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(1, 0); // width
   header.writeUInt32BE(1, 4); // height
   header[8] = 8; // bit depth
   header[9] = 6; // colour type: RGBA
   // compression, filter and interlace stay 0
-  const scanline = Buffer.from([0, 0, 0, 0, 0]); // filter byte + one RGBA pixel
+  const scanline = Buffer.from([0, ...rgba]); // filter byte + one RGBA pixel
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     pngChunk('IHDR', header),
@@ -202,7 +203,7 @@ function png1x1(): Buffer {
   ]);
 }
 
-export const PNG_1X1: Buffer = png1x1();
+export const PNG_1X1: Buffer = solidPng();
 
 const SONGS: readonly Song[] = (
   JSON.parse(readFileSync(resolve(__dirname, '..', 'assets', 'songs.json'), 'utf8')) as { songs: Song[] }
