@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { TextInputKeyPressEvent, ViewStyle } from 'react-native';
-import { findExactMatch, normalize, searchSongs, songLabel, textGuess } from '../game';
+import { findExactMatch, normalize, searchSongs, textGuess } from '../game';
 import type { Song } from '../game';
 import { t } from '../i18n';
 import { radius } from '../theme';
@@ -296,7 +296,6 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
                 key={song.id}
                 role="option"
                 nativeID={optionId(song)}
-                aria-label={songLabel(song)}
                 aria-selected={highlighted}
                 tabIndex={-1}
                 onPress={() => submit(song)}
@@ -315,6 +314,7 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
                   <Text style={styles.optionArtist} numberOfLines={1}>
                     {song.artist}
                   </Text>
+                  <Text style={styles.hidden}>{' – '}</Text>
                   <Text style={styles.optionTitle} numberOfLines={1}>
                     {song.title}
                   </Text>
@@ -389,8 +389,8 @@ function makeStyles(theme: Theme) {
     },
     optionHovered: { backgroundColor: theme.surfaceHover },
     optionHighlighted: { backgroundColor: theme.surfaceHover, borderColor: theme.activeRow },
-    // The artist comes first in the text, as in the option's name ("artist – title"), and the
-    // title is drawn on top.
+    // The option's name is its text, "artist – title" as everywhere else (the dash is read, not
+    // shown), so the artist comes first in the text and the title is drawn on top.
     optionText: { flex: 1, minWidth: 0, flexDirection: 'column-reverse' },
     optionTitle: { ...text(15, '600'), color: theme.text },
     optionArtist: { ...text(13), color: theme.textSecondary },

@@ -193,7 +193,7 @@ test('the suggestion list fits a 320 px phone, scrolls inside itself and truncat
     expect(cover.width).toBeLessThanOrEqual(48);
   }
   const long = page.getByRole('option', { name: /Concerning Hobbits/ });
-  await expect(long).toHaveAttribute('aria-label', 'Howard Shore, London Philharmonic Orchestra & The London Voices – Concerning Hobbits');
+  await expect(long).toHaveAccessibleName('Howard Shore, London Philharmonic Orchestra & The London Voices – Concerning Hobbits');
   const artist = long.getByText(/^Howard Shore/);
   expect(await artist.evaluate((element) => getComputedStyle(element).textOverflow)).toBe('ellipsis');
   expect(await artist.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
