@@ -38,3 +38,5 @@ yarn-error.*
 .env
 .env.*
 !.env.example
+# Screenshots of the visual check (e2e/screenshots.spec.ts)
+screenshots/

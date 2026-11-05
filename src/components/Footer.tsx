@@ -11,15 +11,13 @@ type Props = {
   onOpenAbout: () => void;
   // The About control here; focus returns to it when the sheet closes.
   aboutButtonRef: Ref<View>;
-  // Opens a new room; left out on the room screen.
-  onPlayWithFriends?: () => void;
 };
 
 // Two lines on every screen: the previews attribution and the studio line with the project
-// page link, the About opener, the legal page link and, on the game screen, the way into a room.
-// The separators are decorative. The buttons and the legal link get a 44 px target around their
-// 12 px text, like every other control; the studio link stays inline in its sentence.
-export function Footer({ onOpenAbout, aboutButtonRef, onPlayWithFriends }: Props) {
+// page link, the About opener and the legal page link, at the foot of the page however short it
+// is. The separators are decorative. The buttons and the legal link get a 44 px target around
+// their 12 px text, like every other control; the studio link stays inline in its sentence.
+export function Footer({ onOpenAbout, aboutButtonRef }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   return (
@@ -53,16 +51,6 @@ export function Footer({ onOpenAbout, aboutButtonRef, onPlayWithFriends }: Props
         <Text role="link" href={LEGAL_PATH} style={[styles.line, styles.link, styles.target]}>
           {t('footer.legal')}
         </Text>
-        {onPlayWithFriends !== undefined && (
-          <>
-            <Text aria-hidden style={styles.line}>
-              {' · '}
-            </Text>
-            <Pressable role="button" onPress={onPlayWithFriends} style={styles.button}>
-              <Text style={[styles.line, styles.link]}>{t('footer.playWithFriends')}</Text>
-            </Pressable>
-          </>
-        )}
       </View>
     </View>
   );
@@ -70,7 +58,7 @@ export function Footer({ onOpenAbout, aboutButtonRef, onPlayWithFriends }: Props
 
 function makeStyles(theme: Theme) {
   return StyleSheet.create({
-    footer: { alignSelf: 'stretch', alignItems: 'center', gap: 2, marginTop: 8 },
+    footer: { alignSelf: 'stretch', alignItems: 'center', gap: 2, marginTop: 'auto', paddingTop: 8 },
     row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' },
     line: { ...text(12, '500'), color: theme.textMuted, textAlign: 'center' },
     // Underlined, not told apart by colour alone: the studio link sits inside its sentence.

@@ -29,9 +29,11 @@ export function RoomShare({ code, announce }: { code: string; announce: (message
   return (
     <View style={styles.block}>
       <Text style={styles.label}>{t('rooms.shareLabel')}</Text>
-      <Text selectable style={styles.url}>
-        {url}
-      </Text>
+      <View style={styles.urlWell}>
+        <Text selectable style={styles.url}>
+          {url}
+        </Text>
+      </View>
       <Button label={t('rooms.share')} onPress={share} />
       {outcome !== null && <Text style={styles.note}>{shareOutcomeMessage(outcome)}</Text>}
     </View>
@@ -107,14 +109,17 @@ export function RoomSettings({
 
 function makeStyles(theme: Theme) {
   return StyleSheet.create({
-    block: {
+    // Each block sits in a card of the room screen, so it draws no frame of its own.
+    block: { alignSelf: 'stretch', gap: 10 },
+    // The room link in a well, so it reads as something to copy.
+    urlWell: {
       alignSelf: 'stretch',
-      gap: 10,
-      backgroundColor: theme.surface,
-      borderRadius: radius.lg,
+      borderRadius: radius.md,
       borderWidth: 1,
-      borderColor: theme.border,
-      padding: 16,
+      borderColor: theme.borderStrong,
+      backgroundColor: theme.background,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
     row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
     label: { ...text(15, '600'), color: theme.text, flexShrink: 1 },

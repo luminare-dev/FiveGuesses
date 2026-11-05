@@ -1,6 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { focusWasDropped } from '../a11y/focus';
 import { useAnnouncer } from '../a11y/useAnnouncer';
 import { useSnippetPlayer } from '../audio/useSnippetPlayer';
@@ -17,7 +16,9 @@ import { SONGS } from '../songs';
 import { resetAllData } from '../storage';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
-import { tabularNums, text } from '../theme/typography';
+import { COLUMN_MAX, useLayout } from '../theme/layout';
+import { card } from '../theme/surface';
+import { display, fluid, tabularNums, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 import type { SourceChoice } from '../useGame';
 import { AboutSheet } from './AboutSheet';
@@ -26,8 +27,9 @@ import { Board } from './Board';
 import { Button } from './Button';
 import { Footer } from './Footer';
 import { GuessCombobox } from './GuessCombobox';
-import { Wordmark } from './Header';
+import { Header } from './Header';
 import { LiveRegion } from './LiveRegion';
+import { Page } from './Page';
 import { RoomSettings, RoomShare } from './RoomLobby';
 import { RoomPlayers } from './RoomPlayers';
 import { RoundResults, Standings } from './RoomResults';
@@ -100,8 +102,9 @@ async function gamePool(source: RoomSource, rounds: number): Promise<{ label: st
 // A duel room at /r/<CODE>: the name form, the lobby, the rounds, the results and the closed
 // states, with its own header, the live region, the footer and the About and song sheets.
 export function RoomScreen({ code }: Props) {
-  const { theme, scheme, preference, setPreference } = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const { theme, preference, setPreference } = useTheme();
+  const { twoColumns } = useLayout();
+  const styles = useMemo(() => makeStyles(theme, twoColumns), [theme, twoColumns]);
   const { message, nonce, announce, withdraw } = useAnnouncer();
   const room = useRoom(code);
   const { view, connection, send } = room;
@@ -260,14 +263,14 @@ export function RoomScreen({ code }: Props) {
   let body: React.ReactNode;
   if (connection === 'closed' && room.closed !== null) {
     body = (
-      <View style={styles.card}>
+      <View style={[styles.card, styles.narrow]}>
         {sectionHeading(closedMessage(room.closed))}
         {backHome}
       </View>
     );
   } else if (connection === 'unreachable') {
     body = (
-      <View style={styles.card}>
+      <View style={[styles.card, styles.narrow]}>
         {sectionHeading(t('rooms.unreachable'))}
         <Button label={t('rooms.retry')} onPress={room.retry} />
         {backHome}
@@ -275,7 +278,7 @@ export function RoomScreen({ code }: Props) {
     );
   } else if (connection === 'need_name') {
     body = (
-      <View style={styles.card}>
+      <View style={[styles.card, styles.narrow]}>
         {sectionHeading(t('rooms.joinTitle'))}
         <TextInput
           aria-label={t('rooms.nameLabel')}
@@ -296,7 +299,7 @@ export function RoomScreen({ code }: Props) {
     );
   } else if (view === null || you === null) {
     body = (
-      <View style={styles.card}>
+      <View style={[styles.card, styles.narrow]}>
         {sectionHeading(t('rooms.connecting'))}
       </View>
     );
@@ -344,151 +347,137 @@ export function RoomScreen({ code }: Props) {
 
     if (phase === 'lobby') {
       body = (
-        <>
-          <View style={styles.card}>
-            {sectionHeading(t('rooms.lobbyTitle'))}
-            <RoomShare code={code} announce={announce} />
-            {settings}
+        <View style={styles.columns}>
+          <View style={styles.primary}>
+            <View style={styles.card}>
+              {sectionHeading(t('rooms.lobbyTitle'))}
+              <RoomShare code={code} announce={announce} />
+              <View aria-hidden style={styles.divider} />
+              {settings}
+            </View>
           </View>
-          {players}
-        </>
+          <View style={styles.secondary}>{players}</View>
+        </View>
       );
     } else if (phase === 'playing' && game !== null) {
       const playingNow = myStatus === 'playing';
       body = (
-        <>
-          {sectionHeading(t('rooms.roundTitle', { round: game.round, rounds: game.rounds }))}
-          <Text style={styles.note}>{game.label}</Text>
-          {playingNow && (
-            <>
-              <SnippetBar
-                unlockedIndex={stage}
-                view={snippet.view}
-                onPlay={play}
-                onStop={stop}
-                announce={announce}
-                withdraw={withdraw}
-              />
-              <Board entries={entries} activeIndex={entries.length} />
-              <GuessCombobox
-                key={game.round}
-                songs={SONGS}
-                live
-                nextSeconds={stage + 1 < SNIPPET_SECONDS.length ? SNIPPET_SECONDS[stage + 1] : null}
-                isLastGuess={entries.length === MAX_GUESSES - 1}
-                onGuess={guess}
-                onSkip={skip}
-                announce={announce}
-                withdraw={withdraw}
-              />
-            </>
-          )}
-          {!playingNow && (
-            <View style={styles.card}>
-              <Text style={[styles.outcome, myStatus === 'won' && styles.outcomeWon]}>
-                {myStatus === 'won'
-                  ? t('reveal.won')
-                  : myStatus === 'out'
-                    ? t('rooms.youSitOut')
-                    : myStatus === 'waiting' || myStatus === null
-                      ? t('rooms.youWait')
-                      : myStatus === 'skipped'
-                        ? isHost
-                          ? t('rooms.youSkippedIdle')
-                          : t('rooms.youSkipped')
-                        : t('reveal.lost')}
-              </Text>
-              {entries.length > 0 && <Board entries={entries} activeIndex={null} />}
-              {game.answer !== null && <AnswerCard song={game.answer} />}
-              <Text style={styles.note}>{t('rooms.waitingForOthers')}</Text>
-              <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
-            </View>
-          )}
-          <View style={styles.row}>
-            {sitOut}
-            {isHost && (
-              <>
-                <Button variant="secondary" label={t('rooms.endRound')} onPress={() => send({ t: 'endRound' })} />
-                <Button variant="secondary" label={t('rooms.endGame')} onPress={() => send({ t: 'endGame' })} />
-              </>
+        <View style={styles.columns}>
+          <View style={styles.primary}>
+            {sectionHeading(t('rooms.roundTitle', { round: game.round, rounds: game.rounds }))}
+            <Text style={styles.note}>{game.label}</Text>
+            {playingNow && (
+              <View style={styles.card}>
+                <SnippetBar
+                  unlockedIndex={stage}
+                  view={snippet.view}
+                  onPlay={play}
+                  onStop={stop}
+                  announce={announce}
+                  withdraw={withdraw}
+                />
+                <Board entries={entries} activeIndex={entries.length} />
+                <GuessCombobox
+                  key={game.round}
+                  songs={SONGS}
+                  live
+                  nextSeconds={stage + 1 < SNIPPET_SECONDS.length ? SNIPPET_SECONDS[stage + 1] : null}
+                  isLastGuess={entries.length === MAX_GUESSES - 1}
+                  onGuess={guess}
+                  onSkip={skip}
+                  announce={announce}
+                  withdraw={withdraw}
+                />
+              </View>
             )}
+            {!playingNow && (
+              <View style={styles.card}>
+                <Text style={[styles.outcome, myStatus === 'won' && styles.outcomeWon]}>
+                  {myStatus === 'won'
+                    ? t('reveal.won')
+                    : myStatus === 'out'
+                      ? t('rooms.youSitOut')
+                      : myStatus === 'waiting' || myStatus === null
+                        ? t('rooms.youWait')
+                        : myStatus === 'skipped'
+                          ? isHost
+                            ? t('rooms.youSkippedIdle')
+                            : t('rooms.youSkipped')
+                          : t('reveal.lost')}
+                </Text>
+                {entries.length > 0 && <Board entries={entries} activeIndex={null} />}
+                {game.answer !== null && <AnswerCard song={game.answer} />}
+                <Text style={styles.note}>{t('rooms.waitingForOthers')}</Text>
+                <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+              </View>
+            )}
+            <View style={styles.row}>
+              {sitOut}
+              {isHost && (
+                <>
+                  <Button variant="secondary" label={t('rooms.endRound')} onPress={() => send({ t: 'endRound' })} />
+                  <Button variant="secondary" label={t('rooms.endGame')} onPress={() => send({ t: 'endGame' })} />
+                </>
+              )}
+            </View>
           </View>
-          {players}
-        </>
+          <View style={styles.secondary}>{players}</View>
+        </View>
       );
     } else if (phase === 'reveal' && game !== null) {
       body = (
-        <>
-          <View style={styles.card}>
-            {sectionHeading(t('rooms.roundOver', { round: game.round, rounds: game.rounds }))}
-            {game.answer !== null && <AnswerCard song={game.answer} />}
-            <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+        <View style={styles.columns}>
+          <View style={styles.primary}>
+            <View style={styles.card}>
+              {sectionHeading(t('rooms.roundOver', { round: game.round, rounds: game.rounds }))}
+              {game.answer !== null && <AnswerCard song={game.answer} />}
+              <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+            </View>
+            {game.results !== null && <RoundResults results={game.results} players={view.players} />}
+            <Text style={styles.note}>
+              {game.revealUntil !== null ? t('rooms.nextSoon') : t('rooms.waitingForSitIn')}
+            </Text>
+            <View style={styles.row}>
+              {sitOut}
+              {isHost && (
+                <>
+                  <Button label={t('rooms.nextRound')} onPress={() => send({ t: 'next' })} />
+                  <Button variant="secondary" label={t('rooms.endGame')} onPress={() => send({ t: 'endGame' })} />
+                </>
+              )}
+            </View>
           </View>
-          {game.results !== null && <RoundResults results={game.results} players={view.players} />}
-          <Text style={styles.note}>
-            {game.revealUntil !== null ? t('rooms.nextSoon') : t('rooms.waitingForSitIn')}
-          </Text>
-          <View style={styles.row}>
-            {sitOut}
-            {isHost && (
-              <>
-                <Button label={t('rooms.nextRound')} onPress={() => send({ t: 'next' })} />
-                <Button variant="secondary" label={t('rooms.endGame')} onPress={() => send({ t: 'endGame' })} />
-              </>
-            )}
-          </View>
-          {players}
-        </>
+          <View style={styles.secondary}>{players}</View>
+        </View>
       );
     } else {
       body = (
-        <>
-          <View style={styles.card}>
-            {sectionHeading(t('rooms.finishedTitle'))}
-            {view.standings !== null && <Standings standings={view.standings} />}
-          </View>
-          {game?.answer && (
+        <View style={styles.columns}>
+          <View style={styles.primary}>
             <View style={styles.card}>
-              <Text role="heading" aria-level={2} style={styles.subheading}>
-                {t('rooms.lastSong')}
-              </Text>
-              <AnswerCard song={game.answer} />
-              <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+              {sectionHeading(t('rooms.finishedTitle'))}
+              {view.standings !== null && <Standings standings={view.standings} />}
             </View>
-          )}
-          {settings}
-          {backHome}
-          {players}
-        </>
+            {game?.answer && (
+              <View style={styles.card}>
+                <Text role="heading" aria-level={2} style={styles.subheading}>
+                  {t('rooms.lastSong')}
+                </Text>
+                <AnswerCard song={game.answer} />
+                <Text style={styles.attribution}>{t('reveal.previewsCredit')}</Text>
+              </View>
+            )}
+            <View style={styles.card}>{settings}</View>
+            {backHome}
+          </View>
+          <View style={styles.secondary}>{players}</View>
+        </View>
       );
     }
   }
 
-  return (
-    <View style={styles.root}>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.column}>
-            <View role="banner" style={styles.header}>
-              <View style={styles.headerRow}>
-                <Wordmark />
-                {connection !== 'closed' && you !== null && (
-                  <Button variant="secondary" label={t('rooms.leave')} onPress={room.leave} style={styles.push} />
-                )}
-              </View>
-              <Text style={styles.subtitle}>{subtitle(code, view)}</Text>
-            </View>
-            <LiveRegion message={message} nonce={nonce} />
-            {connection === 'connecting' && view !== null && <Text style={styles.note}>{t('rooms.reconnecting')}</Text>}
-            {errorText !== null && connection === 'joined' && <Text style={styles.error}>{errorText}</Text>}
-            <View role="main" style={styles.main}>
-              {body}
-            </View>
-            <Footer onOpenAbout={openAbout} aboutButtonRef={footerAbout} />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+  const sheets = (
+    <>
       <AboutSheet
         visible={sheet === 'about'}
         onClose={closeSheet}
@@ -504,39 +493,53 @@ export function RoomScreen({ code }: Props) {
         mode="room"
         onChoose={chooseSource}
       />
-    </View>
+    </>
+  );
+
+  return (
+    <Page overlay={sheets}>
+      <Header>
+        {connection !== 'closed' && you !== null && (
+          <Button variant="secondary" size="small" label={t('rooms.leave')} onPress={room.leave} />
+        )}
+      </Header>
+      <Text style={styles.subtitle}>{subtitle(code, view)}</Text>
+      <LiveRegion message={message} nonce={nonce} />
+      {connection === 'connecting' && view !== null && <Text style={styles.note}>{t('rooms.reconnecting')}</Text>}
+      {errorText !== null && connection === 'joined' && <Text style={styles.error}>{errorText}</Text>}
+      <View role="main" style={styles.main}>
+        {body}
+      </View>
+      <Footer onOpenAbout={openAbout} aboutButtonRef={footerAbout} />
+    </Page>
   );
 }
 
-function makeStyles(theme: Theme) {
+function makeStyles(theme: Theme, twoColumns: boolean) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: theme.background },
-    fill: { flex: 1 },
-    scroll: { flexGrow: 1, alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-    column: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: 16 },
-    header: { alignSelf: 'stretch', gap: 6 },
-    headerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-    push: { marginLeft: 'auto' },
-    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary },
-    main: { alignSelf: 'stretch', gap: 16 },
-    section: { alignSelf: 'stretch', gap: 8 },
-    card: {
+    subtitle: { ...text(13, '600'), ...tabularNums, color: theme.textSecondary, marginTop: -8 },
+    main: { alignSelf: 'stretch', gap: fluid(16, 24) },
+    // In the two-column layout the lobby card and the players sit side by side.
+    columns: {
       alignSelf: 'stretch',
-      alignItems: 'stretch',
-      backgroundColor: theme.surface,
-      borderRadius: radius.lg,
-      borderWidth: 1,
-      borderColor: theme.border,
-      padding: 20,
-      gap: 12,
+      flexDirection: twoColumns ? 'row' : 'column',
+      alignItems: twoColumns ? 'flex-start' : 'stretch',
+      gap: fluid(16, 28),
     },
-    heading: { ...text(20, '700'), color: theme.text },
+    primary: twoColumns ? { flex: 3, minWidth: 0, gap: fluid(16, 24) } : { alignSelf: 'stretch', gap: 16 },
+    secondary: twoColumns ? { flex: 2, minWidth: 0 } : { alignSelf: 'stretch' },
+    section: { ...card(theme), gap: 12 },
+    // A single card (the name form, a notice) keeps the one-column width on a wide screen.
+    divider: { height: 1, alignSelf: 'stretch', backgroundColor: theme.cardBorder, marginVertical: 4 },
+    narrow: { alignSelf: 'center', width: '100%', maxWidth: COLUMN_MAX },
+    card: { ...card(theme), alignItems: 'stretch', gap: 12 },
+    heading: { ...display(20, '700'), color: theme.text },
     subheading: { ...text(17, '700'), color: theme.text },
     outcome: { ...text(20, '700'), color: theme.textSecondary, textAlign: 'center' },
     outcomeWon: { color: theme.correct },
     note: { ...text(14, '500'), color: theme.textSecondary },
     error: { ...text(14, '600'), color: theme.partial },
-    attribution: { ...text(12, '500'), color: theme.textMuted, textAlign: 'center' },
+    attribution: { ...text(13, '500'), color: theme.textMuted, textAlign: 'center' },
     row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignSelf: 'stretch' },
     homeLink: {
       ...text(16, '600'),
