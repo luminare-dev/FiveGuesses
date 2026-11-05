@@ -18,6 +18,7 @@ table is kept in step with `src/game.ts`, `src/config.ts` and `app.json`.
 | `expo.web.name` (`app.json`) | string | `FiveGuesses — daily song guessing` | The page title. |
 | `expo.web.description` (`app.json`) | string | the one-line description from the README | The `description` meta tag of the page. |
 | `expo.web.themeColor` (`app.json`) | colour | `#0A1224` | The `theme-color` meta tag the export appends; the shell's own light and dark values live in `public/index.html`. |
+| `SPOTIFY_IMPORT` (Worker variable, set by `api/scripts/deploy.py` from the environment) | `on` or `off` | `on` | `off` turns the Spotify playlist import off: `/api/import` answers 503 `spotify_unavailable` for a Spotify link. The import reads the public embed page `open.spotify.com/embed/playlist/<id>`, not the Spotify Web API, and stores nothing. |
 | `PW_CHROMIUM_PATH` | environment variable | `/opt/pw-browsers/chromium` | A Chromium binary for `npm run e2e`, used outside CI when the file exists; otherwise the tests use the Chromium that `npx playwright install chromium` provides (the build pinned by `@playwright/test` in the lockfile). CI ignores it and runs the same install command with `--with-deps`. |
 
 ## Secrets

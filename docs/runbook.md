@@ -92,6 +92,10 @@ python3 -I api/scripts/deploy.py             # upload, migration, secret, custom
 node api/scripts/smoke.mjs                   # live checks, rooms over WebSocket included
 ```
 
+The Spotify import reads the public embed page of a playlist; when Spotify refuses the server, the
+smoke test prints `502 spotify_blocked` and the app points to exportify.net or a pasted list. To
+turn the import off, deploy with `SPOTIFY_IMPORT=off` in the environment (`deploy.py --no-secret`).
+
 Rollback: check out the previous `api/` and run `deploy.py --no-secret` again. To remove it:
 `DELETE /accounts/{account}/workers/domains/{domain_id}`, then
 `DELETE /accounts/{account}/workers/scripts/fiveguesses-api?force=true`.

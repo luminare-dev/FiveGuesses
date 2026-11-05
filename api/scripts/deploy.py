@@ -31,6 +31,10 @@ COMPATIBILITY_DATE = "2026-10-01"
 SRC = Path(__file__).resolve().parent.parent / "src"
 
 
+def spotify_import() -> str:
+    return "off" if os.environ.get("SPOTIFY_IMPORT", "").strip().lower() == "off" else "on"
+
+
 def build_metadata(first: bool) -> dict:
     meta = {
         "main_module": "index.mjs",
@@ -40,6 +44,8 @@ def build_metadata(first: bool) -> dict:
             # Per IP: 20 API calls and 60 room connections a minute.
             {"type": "ratelimit", "name": "RL", "namespace_id": "1001", "simple": {"limit": 20, "period": 60}},
             {"type": "ratelimit", "name": "RL_WS", "namespace_id": "1002", "simple": {"limit": 60, "period": 60}},
+            # SPOTIFY_IMPORT=off in the environment turns the Spotify import off (503 spotify_unavailable).
+            {"type": "plain_text", "name": "SPOTIFY_IMPORT", "text": spotify_import()},
         ],
         "keep_bindings": ["secret_text"],
         "observability": {"enabled": False},

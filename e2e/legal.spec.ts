@@ -9,6 +9,7 @@ const HEADINGS = [
   'Requests to Apple',
   'Rooms and playlist import',
   'YouTube',
+  'Spotify',
   'Your rights',
 ];
 
@@ -21,12 +22,13 @@ const REQUIRED_TEXT = [
   '7 days',
   '5 weeks',
   'Datenschutzbehörde',
-  'Last updated: 2 November 2026',
+  'Last updated: 5 November 2026',
   'YouTube API Services',
   'https://www.youtube.com/t/terms',
   'https://policies.google.com/privacy',
   'api.fiveguesses.app',
   'fg:room:',
+  'open.spotify.com',
 ];
 
 test('the legal page is static, complete and leads back to the game', async ({ page }) => {
