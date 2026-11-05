@@ -4,15 +4,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
+import { transition } from '../theme/surface';
 import { text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 
 export type ButtonVariant = 'primary' | 'secondary';
+// Small: a smaller label and padding for the header, still 44 px high.
+export type ButtonSize = 'regular' | 'small';
 
 type Props = {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: ButtonSize;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   ref?: Ref<View>;
@@ -24,7 +28,7 @@ type Props = {
 // The shared text button: a filled primary action or an outlined secondary one,
 // at least 44 px high, with a role and a visible text label. Hover and pressed states follow
 // the role map; the dark theme keeps its fill and dims it instead.
-export function Button({ label, onPress, variant = 'primary', disabled = false, style, ref, ...a11y }: Props) {
+export function Button({ label, onPress, variant = 'primary', size = 'regular', disabled = false, style, ref, ...a11y }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [hovered, setHovered] = useState(false);
@@ -40,6 +44,7 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.base,
+        size === 'small' && styles.small,
         primary ? styles.primary : styles.secondary,
         hovered && !pressed && !disabled && (primary ? styles.primaryHover : styles.secondaryHover),
         pressed && !disabled && (primary ? styles.primaryPressed : styles.secondaryPressed),
@@ -48,7 +53,9 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
       ]}
       {...a11y}
     >
-      <Text style={primary ? styles.primaryLabel : styles.secondaryLabel}>{label}</Text>
+      <Text style={[primary ? styles.primaryLabel : styles.secondaryLabel, size === 'small' && styles.smallLabel]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -63,14 +70,17 @@ function makeStyles(theme: Theme) {
       paddingVertical: 10,
       alignItems: 'center',
       justifyContent: 'center',
+      ...transition(),
     },
+    small: { paddingHorizontal: 12, paddingVertical: 8 },
+    smallLabel: { ...text(14, '600') },
     // The transparent border is invisible here; in forced-colours mode, where the fill turns into
     // the page colour, the browser draws it in the system text colour, so the button keeps its shape.
     primary: { backgroundColor: theme.primary, borderWidth: 1, borderColor: 'transparent' },
     primaryHover: dims ? { opacity: 0.9 } : { backgroundColor: theme.primaryHover },
     primaryPressed: dims ? { opacity: 0.8 } : { backgroundColor: theme.primaryPressed },
     primaryLabel: { ...text(16, '600'), color: theme.onPrimary },
-    secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.borderStrong },
+    secondary: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.borderStrong },
     secondaryHover: { backgroundColor: theme.surfaceHover },
     secondaryPressed: { backgroundColor: theme.surfaceHover, opacity: 0.9 },
     secondaryLabel: { ...text(16, '600'), color: theme.text },

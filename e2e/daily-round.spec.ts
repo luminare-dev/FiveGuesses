@@ -31,8 +31,16 @@ test('a daily round is won with the keyboard alone', async ({ page }) => {
   const answer = expectedDailyLabel(58);
   expect(answer).toBe('Olivia Rodrigo – drivers license');
 
-  // Three Tabs from the page start: Statistics, About, play.
-  for (const name of ['Statistics', 'About', 'Play the 1-second snippet']) {
+  // Seven Tabs from the page start: Statistics, About, the four modes, play.
+  for (const name of [
+    'Statistics',
+    'About',
+    'Daily song',
+    'Free play',
+    'Choose songs',
+    'Play with friends',
+    'Play the 1-second snippet',
+  ]) {
     await page.keyboard.press('Tab');
     expect(await activeName(page)).toBe(name);
   }

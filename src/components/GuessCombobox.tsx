@@ -356,6 +356,7 @@ function makeStyles(theme: Theme) {
     // Read by assistive technology through aria-describedby, not shown.
     hidden: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
     buttons: { flexDirection: 'row', gap: 10 },
-    half: { flex: 1 },
+    // Sized by their labels first, so Skip keeps its label on one line on a 320 px phone.
+    half: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', paddingHorizontal: 12 },
   });
 }

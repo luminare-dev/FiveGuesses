@@ -159,18 +159,22 @@ test('every control has a role and a name', async ({ page }) => {
   expect(await page.getByRole('heading').evaluateAll((nodes) => nodes.map((node) => node.tagName))).toEqual(['H1', 'H2']);
 });
 
-test('six Tabs from the page start reach the footer link while Guess is disabled', async ({ page }) => {
+test('ten Tabs from the page start reach the footer link while Guess is disabled', async ({ page }) => {
   await setup(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Guess', exact: true })).toBeDisabled();
   const stops: string[] = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     await page.keyboard.press('Tab');
     stops.push(await activeName(page));
   }
   expect(stops).toEqual([
     'Statistics',
     'About',
+    'Daily song',
+    'Free play',
+    'Choose songs',
+    'Play with friends',
     'Play the 1-second snippet',
     'Your guess',
     'Skip · unlock 2s',

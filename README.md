@@ -26,8 +26,9 @@ hear (1, 2, 4, 8 and 16 seconds).
 ## How to play
 
 Press play and name the song. You get five guesses; a skip or a wrong guess unlocks a longer
-preview. Everyone gets the same song each day, and there is a free-play mode after the daily
-round. Stats and streaks stay in your browser's local storage; there are no accounts.
+preview. Everyone gets the same song each day; free play, song categories, playlists and rooms
+can be picked from the start screen at any time. Stats and streaks stay in your browser's local
+storage; there are no accounts.
 
 Play with friends opens a room at `fiveguesses.app/r/<CODE>`: everyone hears the same song, rounds
 are scored by speed. Rooms, song categories and playlist import run on a small Cloudflare worker

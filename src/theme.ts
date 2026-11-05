@@ -17,6 +17,8 @@ export type Theme = {
   wrongFill: string; wrongBorder: string; wrongText: string; wrongGlyph: string;
   skipBorder: string; skipText: string;
   activeRow: string; track: string; trackUnlocked: string; progress: string; tick: string;
+  // The hairline around a card: it only separates, the fill and the shadow carry the shape.
+  cardBorder: string;
 };
 
 export const light: Theme = {
@@ -30,6 +32,7 @@ export const light: Theme = {
   wrongFill: palette.slate100, wrongBorder: palette.slate500, wrongText: palette.night, wrongGlyph: palette.slate700,
   skipBorder: palette.slate500, skipText: palette.slate500,
   activeRow: palette.royal, track: palette.slate100, trackUnlocked: palette.white, progress: palette.royal, tick: palette.slate500,
+  cardBorder: palette.slate100,
 };
 
 export const dark: Theme = {
@@ -43,9 +46,17 @@ export const dark: Theme = {
   wrongFill: '#141B2D', wrongBorder: palette.slate500, wrongText: palette.white, wrongGlyph: palette.slate300,
   skipBorder: palette.slate500, skipText: palette.slate300,
   activeRow: palette.lumen, track: '#141B2D', trackUnlocked: '#1E2536', progress: palette.lumen, tick: palette.slate500,
+  cardBorder: '#1E2536',
 };
 
-export const radius = { sm: 8, md: 12, lg: 16 } as const;
+export const radius = { sm: 8, md: 12, lg: 16, xl: 20, pill: 999 } as const;
+
+// A palette colour at an alpha, so no colour value lives in a component.
+export function withAlpha(hex: string, alpha: number): string {
+  const value = hex.replace('#', '');
+  const channel = (offset: number) => parseInt(value.slice(offset, offset + 2), 16);
+  return `rgba(${channel(0)},${channel(2)},${channel(4)},${alpha})`;
+}
 
 // The stored choice: follow the system setting or force one scheme. Kept in fg:theme:v1.
 export type ThemePreference = 'system' | 'light' | 'dark';
