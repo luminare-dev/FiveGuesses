@@ -1,5 +1,6 @@
-# Caller: release-please on every push to main. Skipped in the template repository itself
-# (a repository marked as a template), so only repositories created from it make releases.
+# Caller: release-please on every push to main, then the deploy of a new release (deploy.yml).
+# Skipped in the template repository itself (a repository marked as a template), so only
+# repositories created from it make releases.
 # Needs the repository setting "Allow GitHub Actions to create and approve pull requests".
 name: release
 
@@ -28,3 +29,20 @@ jobs:
       issues: write          # release-please labels
       id-token: write        # Sigstore certificate for the attestation
       attestations: write    # store the attestation
+
+  # A release published with GITHUB_TOKEN triggers no "release" event, so the deploy is called here,
+  # after the publish job of the release run. It skips itself while the DEPLOY_* secrets are unset.
+  deploy:
+    needs: release
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ needs.release.outputs.tag_name }}
+    secrets:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+    permissions:
+      contents: read   # download the files attached to the release
