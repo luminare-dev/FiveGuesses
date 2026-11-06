@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { TextInputKeyPressEvent } from 'react-native';
-import { findExactMatch, normalize, searchSongs, songLabel, textGuess } from '../game';
+import type { TextInputKeyPressEvent, ViewStyle } from 'react-native';
+import { findExactMatch, normalize, searchSongs, textGuess } from '../game';
 import type { Song } from '../game';
 import { t } from '../i18n';
 import { radius } from '../theme';
@@ -10,6 +10,7 @@ import { text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
 import { LISTBOX_ROLE } from '../types/react-native-web';
 import { MAX_SUGGESTIONS, useSuggestions } from '../useSuggestions';
+import { revealInViewport, useVisibleHeight } from '../useVisibleHeight';
 import { Button } from './Button';
 
 type Props = {
@@ -33,6 +34,14 @@ const LISTBOX_ID = 'guess-listbox';
 const LAST_WARNING_ID = 'guess-last-warning';
 // Typing announces the number of matches once the keys have paused this long.
 const ANNOUNCE_DELAY = 300;
+// One option: two lines of text beside a 44 px cover, 56 px high with its padding and border.
+// The list shows at most five and a half of them (the half row says it scrolls), and never more
+// than fits under the input in the visible part of the page, but always two and a half.
+const ROW_HEIGHT = 56;
+// The input with its border, rounded up.
+const INPUT_HEIGHT = 48;
+const listHeight = (visible: number) =>
+  Math.max(ROW_HEIGHT * 2.5, Math.min(ROW_HEIGHT * 5.5, visible - INPUT_HEIGHT - 32));
 
 const optionId = (song: Song) => `guess-option-${song.id}`;
 // The threshold searchSongs uses: two characters left after normalisation. "a-" or "R." on the
@@ -49,6 +58,11 @@ const isQuery = (value: string) => normalize(value).length >= 2;
 export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, onGuess, onSkip, announce, withdraw }: Props) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const visibleHeight = useVisibleHeight();
+  const maxListHeight = listHeight(visibleHeight);
+  // A class of its own per height, so the list carries no inline style (the CSP allows none).
+  const listSize = useMemo(() => StyleSheet.create({ box: { maxHeight: maxListHeight } }).box, [maxListHeight]);
+  const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState<number | null>(null);
@@ -65,6 +79,16 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
   const typedGuesses = live && fallbackMode;
   const covers = live && !fallbackMode;
   const activeId = open && highlight !== null && highlight < suggestions.length ? optionId(suggestions[highlight]) : undefined;
+
+  // While the box has focus, it and its open list stay in the visible part of the page: when it
+  // gets focus, when the list opens or changes length, and when the keyboard changes the visible
+  // height. The browser only scrolls the input itself into view, and not always above the keyboard.
+  useEffect(() => {
+    if (!focused || Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const input = document.getElementById(INPUT_ID);
+    if (input === null) return;
+    revealInViewport(input, (open ? document.getElementById(LISTBOX_ID) : null) ?? input);
+  }, [focused, open, suggestions.length, visibleHeight]);
 
   // Focus stays in the input, so the browser does not scroll to the active option by itself;
   // below the fold (a phone with the on-screen keyboard up) it would be picked unseen.
@@ -253,6 +277,8 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
         value={query}
         onChangeText={onChangeText}
         onKeyPress={onKeyPress}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onSubmitEditing={submitTyped}
         blurOnSubmit={false}
         autoCorrect={false}
@@ -262,7 +288,7 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
         enterKeyHint="go"
       />
       {open && (
-        <View role={LISTBOX_ROLE} nativeID={LISTBOX_ID} aria-label={t('guess.listLabel')} style={styles.listbox}>
+        <View role={LISTBOX_ROLE} nativeID={LISTBOX_ID} aria-label={t('guess.listLabel')} style={[styles.listbox, listSize]}>
           {suggestions.map((song, index) => {
             const highlighted = index === highlight;
             return (
@@ -284,7 +310,15 @@ export function GuessCombobox({ songs, live = false, nextSeconds, isLastGuess, o
                 {covers && song.artworkUrl !== '' && (
                   <Image source={{ uri: song.artworkUrl }} aria-hidden style={styles.cover} />
                 )}
-                <Text style={styles.optionText}>{songLabel(song)}</Text>
+                <View style={styles.optionText}>
+                  <Text style={styles.optionArtist} numberOfLines={1}>
+                    {song.artist}
+                  </Text>
+                  <Text style={styles.hidden}>{' – '}</Text>
+                  <Text style={styles.optionTitle} numberOfLines={1}>
+                    {song.title}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -326,32 +360,41 @@ function makeStyles(theme: Theme) {
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
+    // Below the input, in the flow of the card, so it covers nothing; it scrolls inside itself
+    // (listHeight) and does not hand the end of a swipe on to the page.
     listbox: {
       borderWidth: 1,
       borderColor: theme.borderStrong,
       borderRadius: radius.md,
       backgroundColor: theme.surface,
-      overflow: 'hidden',
-    },
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      overscrollBehavior: 'contain',
+    } as ViewStyle,
     // Every option keeps a 2 px border so the highlight does not shift the text; the highlighted
     // option draws it in the active-row colour (above 3:1 on both fills) on top of the hover fill,
     // since the input keeps focus and this is the only sign of the active option. A hovered option
-    // gets the fill alone. Long titles wrap instead of losing their end.
+    // gets the fill alone. Title and artist get a line each and end in an ellipsis; the option's
+    // name keeps them whole.
     option: {
-      minHeight: 44,
+      minHeight: ROW_HEIGHT,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       borderWidth: 2,
       borderColor: 'transparent',
       borderRadius: radius.sm,
     },
     optionHovered: { backgroundColor: theme.surfaceHover },
     optionHighlighted: { backgroundColor: theme.surfaceHover, borderColor: theme.activeRow },
-    optionText: { ...text(15), color: theme.text, flexShrink: 1 },
-    cover: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: theme.surfaceHover },
+    // The option's name is its text, "artist – title" as everywhere else (the dash is read, not
+    // shown), so the artist comes first in the text and the title is drawn on top.
+    optionText: { flex: 1, minWidth: 0, flexDirection: 'column-reverse' },
+    optionTitle: { ...text(15, '600'), color: theme.text },
+    optionArtist: { ...text(13), color: theme.textSecondary },
+    cover: { width: 44, height: 44, flexShrink: 0, borderRadius: radius.sm, backgroundColor: theme.surfaceHover },
     noMatches: { ...text(13, '500'), color: theme.textSecondary, paddingHorizontal: 4 },
     // Read by assistive technology through aria-describedby, not shown.
     hidden: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
