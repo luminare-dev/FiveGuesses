@@ -32,13 +32,21 @@ If it succeeds, set `DEPLOY_PATH` to the full docroot path, never `.`.
 
 Repository secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` (the whole private key file) and
 `DEPLOY_PATH` (`.` with rrsync, otherwise the docroot path without a trailing slash). Without all
-four the deploy job is skipped.
+four the deploy job is skipped. `DEPLOY_KNOWN_HOSTS` pins the host key (`ssh-keyscan -p 22 <host>`,
+checked against the KeyHelp fingerprint); unset, the first connection accepts any key. SSH uses
+port 22.
+
+On KeyHelp the SSH user is chrooted to its home, so `DEPLOY_PATH` is the path inside the jail, for
+example `/www/fiveguesses.app`.
+
+The API deploy (section 8) reads `CLOUDFLARE_API_TOKEN` and `YOUTUBE_API_KEY`; without both it is
+skipped.
 
 ## 4. Deploy
 
 release-please needs "Allow GitHub Actions to create and approve pull requests" (Settings →
-Actions → General). A release published by the release run does not trigger the deploy, so start
-it by hand once the release is out:
+Actions → General). The release run calls `deploy.yml` once the release is published (a release
+published with `GITHUB_TOKEN` triggers no `release` event). To deploy a tag by hand:
 
 ```bash
 gh workflow run deploy.yml -R luminare-dev/FiveGuesses -f tag=vX.Y.Z
@@ -96,6 +104,9 @@ The Spotify import reads the public embed page of a playlist; when Spotify refus
 smoke test prints `502 spotify_blocked` and the app points to exportify.net or a pasted list. To
 turn the import off, deploy with `SPOTIFY_IMPORT=off` in the environment (`deploy.py --no-secret`).
 
+`api-deploy.yml` runs `deploy.py` on every push to main that changes `api/**` (or by hand:
+`gh workflow run api-deploy.yml -R luminare-dev/FiveGuesses`).
+
 Rollback: check out the previous `api/` and run `deploy.py --no-secret` again. To remove it:
 `DELETE /accounts/{account}/workers/domains/{domain_id}`, then
 `DELETE /accounts/{account}/workers/scripts/fiveguesses-api?force=true`.
@@ -107,5 +118,6 @@ Rollback: check out the previous `api/` and run `deploy.py --no-secret` again. T
 - **Certificate expired**: request it again in KeyHelp; make sure `.well-known/` was not deleted
   and DNS is right.
 - **Deploy workflow red**: a checksum mismatch means the release files changed; `Permission denied`
-  means a wrong key or user; `No such file` means a wrong `DEPLOY_PATH`.
+  means a wrong key or user; `No such file` means a wrong `DEPLOY_PATH`; `Host key verification
+  failed` means `DEPLOY_KNOWN_HOSTS` does not match the host (scan it again, check the fingerprint).
 - **Manifest served as `application/octet-stream`**: `.htaccess` overrides are off for the domain.

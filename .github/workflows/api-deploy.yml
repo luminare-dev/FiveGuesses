@@ -1,0 +1,52 @@
+# Deploy the Cloudflare Worker (api/) with api/scripts/deploy.py on every push to main that changes
+# api/, or by hand. Skipped unless CLOUDFLARE_API_TOKEN and YOUTUBE_API_KEY are set.
+name: api-deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: api-deploy
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      configured: ${{ steps.secrets.outputs.configured }}
+    steps:
+      - name: Are the two API secrets set?
+        id: secrets
+        env:
+          # Secrets are not available in a job-level "if", so a step turns the answer into an output.
+          CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.YOUTUBE_API_KEY != '' }}
+        run: echo "configured=$CONFIGURED" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: deploy
+    needs: check
+    if: ${{ needs.check.outputs.configured == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read   # check out api/
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Upload the Worker, set the secret, poll /api/health
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python3 -I api/scripts/deploy.py

@@ -1,10 +1,29 @@
 # Deploy a published release to the Apache host (verify SHA256SUMS, extract, rsync over SSH).
-# Run by hand with the tag (docs/runbook.md); skipped unless the four DEPLOY_* secrets are set.
+# Called by release.yml after a release is published (a release published with GITHUB_TOKEN
+# triggers no "release" event), or run by hand with the tag (docs/runbook.md). Skipped unless
+# DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY and DEPLOY_PATH are set; DEPLOY_KNOWN_HOSTS pins the host key.
 name: deploy
 
 on:
   release:   # only a release published by a person; see the header
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag to deploy (vX.Y.Z).
+        type: string
+        required: true
+    secrets:
+      DEPLOY_HOST:
+        required: false
+      DEPLOY_USER:
+        required: false
+      DEPLOY_KEY:
+        required: false
+      DEPLOY_PATH:
+        required: false
+      DEPLOY_KNOWN_HOSTS:
+        required: false
   workflow_dispatch:
     inputs:
       tag:
@@ -13,10 +32,6 @@ on:
         required: true
 
 permissions: {}
-
-concurrency:
-  group: deploy
-  cancel-in-progress: false
 
 jobs:
   check:
@@ -42,6 +57,10 @@ jobs:
     if: ${{ needs.check.outputs.configured == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # On the job, not the workflow: a called workflow's top-level group would join the caller's run.
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
     permissions:
       contents: read   # download the files attached to the release
     env:
@@ -78,11 +97,20 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
           printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy_key"
-          ssh_opts=(-i "$RUNNER_TEMP/deploy_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+          ssh_opts=(-i "$RUNNER_TEMP/deploy_key" -o BatchMode=yes -o Port=22)
+          # The pinned host key (ssh-keyscan output) when DEPLOY_KNOWN_HOSTS is set, else trust on first use.
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+            ssh_opts+=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$RUNNER_TEMP/known_hosts")
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set; accepting the host key on first use"
+            ssh_opts+=(-o StrictHostKeyChecking=accept-new)
+          fi
           # A relative DEPLOY_PATH ("." with the rrsync key of docs/runbook.md) is safe only while the
           # key's forced command keeps it inside the docroot. rrsync refuses every command but rsync,
           # so a plain command that succeeds means the key is not restricted: stop before
@@ -103,4 +131,4 @@ jobs:
           rsync -az --delete-after --delay-updates --exclude='.well-known/' \
             -e "ssh ${ssh_opts[*]}" \
             ./site/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
-          rm -f "$RUNNER_TEMP/deploy_key"
+          rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts"
