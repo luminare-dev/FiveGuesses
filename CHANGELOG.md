@@ -8,6 +8,13 @@ the Conventional Commit titles of the merged pull requests; do not edit entries 
 <!-- release-please inserts each new release above the first line that starts with "## ["
      (or "## " and a digit). Keep the "Origin" entry below as the last entry of this file. -->
 
+## [0.3.1](https://github.com/luminare-dev/FiveGuesses/compare/v0.3.0...v0.3.1) (2026-11-06)
+
+
+### Fixed
+
+* suggestion list on phones ([#13](https://github.com/luminare-dev/FiveGuesses/issues/13)) ([1943577](https://github.com/luminare-dev/FiveGuesses/commit/194357731e77976333e275416b41680a3f95c90a))
+
 ## [0.3.0](https://github.com/luminare-dev/FiveGuesses/compare/v0.2.0...v0.3.0) (2026-11-05)
 
 
