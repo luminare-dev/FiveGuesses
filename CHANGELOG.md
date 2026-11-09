@@ -8,6 +8,13 @@ the Conventional Commit titles of the merged pull requests; do not edit entries 
 <!-- release-please inserts each new release above the first line that starts with "## ["
      (or "## " and a digit). Keep the "Origin" entry below as the last entry of this file. -->
 
+## [0.3.2](https://github.com/luminare-dev/FiveGuesses/compare/v0.3.1...v0.3.2) (2026-11-09)
+
+
+### Fixed
+
+* suggestions, full playlist import, volume, join by code ([#15](https://github.com/luminare-dev/FiveGuesses/issues/15)) ([3fe083a](https://github.com/luminare-dev/FiveGuesses/commit/3fe083af80fc204629608bf71de6098e431de8ef))
+
 ## [0.3.1](https://github.com/luminare-dev/FiveGuesses/compare/v0.3.0...v0.3.1) (2026-11-06)
 
 
