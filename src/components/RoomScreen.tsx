@@ -200,7 +200,7 @@ export function RoomScreen({ code }: Props) {
     (choice: SourceChoice) => {
       if (choice.kind === 'category') setSource({ kind: 'category', id: choice.id, label: choice.label });
       else if (choice.kind === 'tracks') {
-        setSource({ kind: 'tracks', label: choice.label.slice(0, 60), tracks: choice.tracks.slice(0, MAX_POOL) });
+        setSource({ kind: 'tracks', label: choice.label.slice(0, 60), tracks: choice.tracks });
       }
       setStartError(null);
       announce(t('rooms.live.songsChosen', { source: choice.kind === 'builtin' ? '' : choice.label }));

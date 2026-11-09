@@ -29,7 +29,6 @@ const TITLE_ID = 'sources-title';
 const YOUTUBE_TERMS = 'https://www.youtube.com/t/terms';
 const CSV_MAX_BYTES = 2 * 1024 * 1024;
 // Apple Music ids looked up per import (one request).
-const ID_SAMPLE = 30;
 
 type Lists = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; sources: SourceInfo[] };
 type Work =
@@ -169,7 +168,7 @@ export function SourceSheet({ visible, onClose, openerRef, mode, onChoose }: Pro
           if (run.current === controller) matchList(result.entries, label, controller);
           return;
         }
-        const ids = shuffle(result.items).slice(0, ID_SAMPLE);
+        const ids = shuffle(result.items);
         const tracks = await lookupTracks(
           ids.map((item) => ({ id: item.id, country: result.country })),
           controller.signal
