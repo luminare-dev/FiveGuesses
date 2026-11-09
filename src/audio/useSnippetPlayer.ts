@@ -14,6 +14,8 @@ const SAFETY_MARGIN_MS = 2000;
 // clock has not started moving yet (the seeked status of a replay), so the timer may fire a
 // tenth of a second early; anything further short waits for the rest.
 const STOP_EPSILON = 0.01;
+// Apple's previews are mastered loud; 30 % keeps them comfortable at a normal device volume.
+export const SNIPPET_VOLUME = 0.3;
 
 // A timer handle as clearTimeout accepts it, so the same code types on web and in Node.
 type Timer = Parameters<typeof clearTimeout>[0];
@@ -74,6 +76,9 @@ function clearTimers(c: Controller): void {
 export function useSnippetPlayer(previewUrl: string | null): SnippetPlayer {
   // One player per mount, created without a source so no request leaves the page at load time.
   const player = useAudioPlayer(null, { updateInterval: 100 });
+  useEffect(() => {
+    player.volume = SNIPPET_VOLUME;
+  }, [player]);
   const status = useAudioPlayerStatus(player);
   const online = useOnline();
 
@@ -199,6 +204,7 @@ export function useSnippetPlayer(previewUrl: string | null): SnippetPlayer {
         // because replace() resumes a playing element and the new one has no rejection handler yet.
         if (c.pendingStop) player.pause();
         player.replace({ uri: url });
+        player.volume = SNIPPET_VOLUME;
         c.loadedUrl = url;
       }
       // Everything up to play() runs inside the press handler, which is what the browsers'
