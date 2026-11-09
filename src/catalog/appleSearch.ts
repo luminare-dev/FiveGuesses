@@ -91,6 +91,11 @@ export async function searchApple(query: string, signal?: AbortSignal): Promise<
   const stores: string[] = [COUNTRIES[0]];
   if (appleLimiter.free() >= SECOND_STORE_MIN_FREE && appleLimiter.tryTake()) stores.push(COUNTRIES[1]);
   const answers = await Promise.allSettled(stores.map((country) => searchStore(query, country, signal)));
+  if (signal?.aborted) {
+    const error = new Error('aborted');
+    error.name = 'AbortError';
+    throw error;
+  }
   const results: Result[] = [];
   for (const answer of answers) if (answer.status === 'fulfilled') results.push(...answer.value);
   if (answers.every((a) => a.status === 'rejected')) throw (answers[0] as PromiseRejectedResult).reason;
