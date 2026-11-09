@@ -52,6 +52,14 @@ describe('toSuggestions', () => {
     ]);
     expect(items.map((s) => s.id)).toEqual([3, 1, 2]);
   });
+  it('keeps canonical titles containing piano and tribute ahead of later hits', () => {
+    const items = toSuggestions([
+      result(1, 'Billy Joel', 'Piano Man'),
+      result(2, 'Tenacious D', 'Tribute'),
+      ...Array.from({ length: 8 }, (_, i) => result(i + 3, `Artist ${i}`, `Song ${i}`)),
+    ]);
+    expect(items.map((s) => s.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
   it('gives at most 8', () => {
     const many = Array.from({ length: 20 }, (_, i) => result(i + 1, `Artist ${i}`, `Song ${i}`));
     expect(toSuggestions(many)).toHaveLength(8);

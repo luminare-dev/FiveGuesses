@@ -10,7 +10,7 @@ const COUNTRIES = ['US', 'AT'] as const;
 const SECOND_STORE_MIN_FREE = 6;
 // Karaoke, tribute and similar versions go below the originals.
 const ALTERNATE =
-  /karaoke|tribute|originally performed|as made famous|made famous by|in the style of|8-bit|lullaby|instrumental|\bpiano\b|\bacoustic\b/i;
+  /karaoke|tribute\s+(?:to\b|versions?\b|covers?\b)|originally performed|as made famous|made famous by|in the style of|8-bit|lullaby|instrumental|\bpiano\s+(?:acoustic|versions?|covers?|instrumental)\b|\bacoustic\b/i;
 
 // Thrown for an answer that says to back off (403, 429) or any other failed request.
 export class SearchError extends Error {
