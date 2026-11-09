@@ -1,14 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import type { Ref } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useReducedMotion } from '../a11y/useReducedMotion';
 import { t } from '../i18n';
 import type { RoundMode } from '../round';
+import { parseRoomCode, roomPath } from '../route';
 import { radius } from '../theme';
 import type { Theme } from '../theme';
 import { selectedFill, transition } from '../theme/surface';
 import { fluid, text } from '../theme/typography';
 import { useTheme } from '../theme/useTheme';
+import { Button } from './Button';
 
 type Props = {
   mode: RoundMode;
@@ -55,6 +57,13 @@ export function ModePicker({
   const styles = useMemo(() => makeStyles(theme, layout), [theme, layout]);
   const [creating, setCreating] = useState(false);
   const [roomFailed, setRoomFailed] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeInvalid, setCodeInvalid] = useState(false);
+  const joinByCode = () => {
+    const parsed = parseRoomCode(code);
+    setCodeInvalid(parsed === null);
+    if (parsed !== null && typeof window !== 'undefined') window.location.assign(roomPath(parsed));
+  };
   const playWithFriends = () => {
     setCreating(true);
     setRoomFailed(false);
@@ -102,6 +111,28 @@ export function ModePicker({
         ))}
       </View>
       {roomFailed && <Text style={styles.error}>{t('rooms.createFailed')}</Text>}
+      <View style={styles.joinRow}>
+        <TextInput
+          aria-label={t('rooms.codeLabel')}
+          aria-invalid={codeInvalid}
+          placeholder={t('rooms.codeLabel')}
+          placeholderTextColor={theme.textMuted}
+          value={code}
+          onChangeText={(value) => {
+            setCode(value);
+            setCodeInvalid(false);
+          }}
+          onSubmitEditing={joinByCode}
+          maxLength={80}
+          autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect={false}
+          enterKeyHint="go"
+          style={styles.codeInput}
+        />
+        <Button variant="secondary" label={t('rooms.joinByCode')} onPress={joinByCode} disabled={code.trim() === ''} />
+      </View>
+      {codeInvalid && <Text style={styles.error}>{t('rooms.codeInvalid')}</Text>}
     </View>
   );
 }
@@ -195,5 +226,19 @@ function makeStyles(theme: Theme, layout: Props['layout']) {
     title: { ...text(layout === 'compact' ? 14 : 15, '700'), color: theme.text, flexShrink: 1 },
     description: { ...text(13, '500'), color: theme.textSecondary },
     error: { ...text(14, '600'), color: theme.partial },
+    joinRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    codeInput: {
+      ...text(16),
+      flex: 1,
+      minWidth: 0,
+      minHeight: 44,
+      borderWidth: 1,
+      borderColor: theme.borderStrong,
+      borderRadius: radius.md,
+      backgroundColor: theme.surface,
+      color: theme.text,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
   });
 }

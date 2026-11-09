@@ -1,4 +1,4 @@
-import { parseRoute, roomPath } from '../route';
+import { parseRoomCode, parseRoute, roomPath } from '../route';
 
 describe('parseRoute', () => {
   it('opens a room for /r/<code>', () => {
@@ -12,5 +12,21 @@ describe('parseRoute', () => {
   });
   it('builds the path back', () => {
     expect(roomPath('ABC234')).toBe('/r/ABC234');
+  });
+});
+
+describe('parseRoomCode', () => {
+  it('takes a typed code in any case, with spaces around', () => {
+    expect(parseRoomCode(' abc234 ')).toBe('ABC234');
+    expect(parseRoomCode('ABC 234')).toBe('ABC234');
+  });
+  it('takes the code out of a pasted room link', () => {
+    expect(parseRoomCode('https://fiveguesses.app/r/abc234')).toBe('ABC234');
+    expect(parseRoomCode('fiveguesses.app/r/ABC234/?x=1')).toBe('ABC234');
+  });
+  it('refuses anything else', () => {
+    for (const input of ['', 'ABC23', 'ABC2345', 'ABC10Z', 'https://example.com/abcdef', 'https://fiveguesses.app/legal/']) {
+      expect(parseRoomCode(input)).toBeNull();
+    }
   });
 });

@@ -11,3 +11,14 @@ export function parseRoute(pathname: string): Route {
 export function roomPath(code: string): string {
   return `/r/${code}`;
 }
+
+const CODE = /^[A-Za-z2-9]{6}$/;
+const CODE_IN_LINK = /\/r\/([A-Za-z2-9]{6})\/?(?:[?#].*)?$/;
+
+// A typed room code or a pasted room link -> the code, or null.
+export function parseRoomCode(input: string): string | null {
+  const text = input.trim().replace(/[\s-]/g, '');
+  if (CODE.test(text)) return text.toUpperCase();
+  const match = CODE_IN_LINK.exec(text);
+  return match ? match[1].toUpperCase() : null;
+}
