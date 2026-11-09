@@ -12,8 +12,8 @@ export function roomPath(code: string): string {
   return `/r/${code}`;
 }
 
-const CODE = /^[A-Za-z2-9]{6}$/;
-const CODE_IN_LINK = /\/r\/([A-Za-z2-9]{6})\/?(?:[?#].*)?$/;
+const CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/i;
+const CODE_IN_LINK = /\/r\/([ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6})\/?(?:[?#].*)?$/i;
 
 // A typed room code or a pasted room link -> the code, or null.
 export function parseRoomCode(input: string): string | null {
