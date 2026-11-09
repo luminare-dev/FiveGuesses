@@ -146,7 +146,7 @@ async function routeEntrySearch(page: Page): Promise<URL[]> {
 
 const lines = (n: number) => Array.from({ length: n }, (_, i) => `${i + 1}. Artist ${i} - Song ${i}`).join('\n');
 
-test('a pasted list is matched in the browser, 20 songs at most, under the iTunes limit', async ({ page }) => {
+test('a pasted list is matched in the browser, every song, under the iTunes limit', async ({ page }) => {
   await setup(page);
   const searches = await routeEntrySearch(page);
   const service = requestsTo(page, 'api.fiveguesses.app');
@@ -155,14 +155,14 @@ test('a pasted list is matched in the browser, 20 songs at most, under the iTune
   await sheet.getByRole('textbox', { name: 'Paste a list' }).fill(lines(25));
   await sheet.getByRole('button', { name: 'Use list' }).click();
   // 18 searches in the first minute, then the list waits for the next slot.
-  await expect(sheet.getByText('Matching the songs at Apple: 18 of 20, 18 found…')).toBeVisible();
+  await expect(sheet.getByText('Matching the songs at Apple: 18 of 25, 18 found…')).toBeVisible();
   await expect(sheet.getByText('Apple answers about 20 searches a minute', { exact: false })).toBeVisible();
   expect(searches).toHaveLength(18);
   expect(searches[0].searchParams.get('country')).toBe('AT');
   expect(searches[0].searchParams.get('term')).toMatch(/^Artist \d+ Song \d+$/);
   await page.clock.fastForward(61_000);
-  await expect(sheet.getByText('20 songs found')).toBeVisible();
-  expect(searches).toHaveLength(20);
+  await expect(sheet.getByText('25 songs found')).toBeVisible();
+  expect(searches).toHaveLength(25);
   expect(service.filter((url) => url.pathname !== '/api/sources')).toEqual([]);
 
   await sheet.getByRole('button', { name: 'Play these songs' }).click();
@@ -178,7 +178,7 @@ test('a YouTube playlist comes back as entries; stopping the match keeps what wa
   const sheet = await openSources(page);
   await sheet.getByRole('textbox', { name: 'Playlist link' }).fill('https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG');
   await sheet.getByRole('button', { name: 'Import' }).click();
-  await expect(sheet.getByText('Matching the songs at Apple: 18 of 20, 18 found…')).toBeVisible();
+  await expect(sheet.getByText('Matching the songs at Apple: 18 of 25, 18 found…')).toBeVisible();
   await sheet.getByRole('button', { name: 'Stop and use what was found' }).click();
   await expect(sheet.getByText('18 songs found')).toBeVisible();
   expect(searches).toHaveLength(18);

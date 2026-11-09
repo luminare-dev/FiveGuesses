@@ -76,6 +76,12 @@ export class RateLimiter {
     return true;
   }
 
+  // Slots free right now.
+  free(): number {
+    this.prune();
+    return Math.max(0, this.limit - this.stamps.length);
+  }
+
   // Milliseconds until a slot is free; 0 when one is free now.
   wait(): number {
     this.prune();

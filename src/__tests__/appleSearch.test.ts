@@ -44,6 +44,22 @@ describe('toSuggestions', () => {
     ]);
     expect(items.map((s) => s.id)).toEqual([1, 3]);
   });
+  it('puts karaoke and tribute versions below the originals', () => {
+    const items = toSuggestions([
+      result(1, 'B Lou', 'Sicko Mode (Originally Performed by Travis Scott) [Karaoke Version]'),
+      result(2, 'Tyler Ward', 'Sicko Mode (Piano Acoustic)'),
+      result(3, 'Travis Scott', 'SICKO MODE'),
+    ]);
+    expect(items.map((s) => s.id)).toEqual([3, 1, 2]);
+  });
+  it('keeps canonical titles containing piano and tribute ahead of later hits', () => {
+    const items = toSuggestions([
+      result(1, 'Billy Joel', 'Piano Man'),
+      result(2, 'Tenacious D', 'Tribute'),
+      ...Array.from({ length: 8 }, (_, i) => result(i + 3, `Artist ${i}`, `Song ${i}`)),
+    ]);
+    expect(items.map((s) => s.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
   it('gives at most 8', () => {
     const many = Array.from({ length: 20 }, (_, i) => result(i + 1, `Artist ${i}`, `Song ${i}`));
     expect(toSuggestions(many)).toHaveLength(8);
@@ -56,24 +72,28 @@ describe('searchApple', () => {
     global.fetch = realFetch;
   });
 
-  it('asks the Austrian catalogue and parses the text answer', async () => {
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ resultCount: 1, results: [result(7, 'Oasis', 'Wonderwall')] }),
-    }));
+  it('asks the US and the Austrian catalogue and merges the text answers', async () => {
+    const fetchMock = jest.fn(async (url: string) => {
+      const us = new URL(url).searchParams.get('country') === 'US';
+      const results = us ? [result(7, 'Oasis', 'Wonderwall')] : [result(8, 'Oasis', 'Wonderwall'), result(9, 'Falco', 'Jeanny')];
+      return { ok: true, status: 200, text: async () => JSON.stringify({ resultCount: results.length, results }) };
+    });
     global.fetch = fetchMock as unknown as typeof fetch;
     const items = await searchApple('wonder wall');
-    expect(items?.map((s) => s.id)).toEqual([7]);
-    const url = new URL(String((fetchMock.mock.calls[0] as unknown[])[0]));
-    expect(url.origin + url.pathname).toBe('https://itunes.apple.com/search');
-    expect(Object.fromEntries(url.searchParams)).toEqual({
-      term: 'wonder wall',
-      media: 'music',
-      entity: 'song',
-      limit: '20',
-      country: 'AT',
-    });
+    expect(items?.map((s) => s.id)).toEqual([7, 9]);
+    const urls = fetchMock.mock.calls.map((call) => new URL(String((call as unknown[])[0])));
+    expect(urls[0].origin + urls[0].pathname).toBe('https://itunes.apple.com/search');
+    expect(urls.map((u) => Object.fromEntries(u.searchParams))).toEqual(
+      ['US', 'AT'].map((country) => ({ term: 'wonder wall', media: 'music', entity: 'song', limit: '20', country }))
+    );
+  });
+  it('answers from one store when the other fails', async () => {
+    global.fetch = jest.fn(async (url: string) =>
+      new URL(url).searchParams.get('country') === 'US'
+        ? { ok: false, status: 503, text: async () => '' }
+        : { ok: true, status: 200, text: async () => JSON.stringify({ results: [result(9, 'Falco', 'Jeanny')] }) }
+    ) as unknown as typeof fetch;
+    await expect(searchApple('jeanny')).resolves.toEqual([expect.objectContaining({ id: 9 })]);
   });
   it('throws the status of a refused search', async () => {
     global.fetch = jest.fn(async () => ({ ok: false, status: 403, text: async () => '' })) as unknown as typeof fetch;
@@ -97,12 +117,13 @@ describe('searchApple', () => {
     // The searches above took their slots too.
     expect(appleLimiter.wait()).toBe(0);
     await expect(searchApple('first')).resolves.toEqual([]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const calls = fetchMock.mock.calls.length;
+    expect(calls).toBeGreaterThanOrEqual(1);
     let taken = 0;
     while (appleLimiter.tryTake()) taken++;
     expect(taken).toBeLessThan(APPLE_PER_MINUTE);
     expect(appleLimiter.wait()).toBeGreaterThan(0);
     await expect(searchApple('take on')).resolves.toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(calls);
   });
 });
