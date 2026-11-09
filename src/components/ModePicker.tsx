@@ -132,7 +132,7 @@ export function ModePicker({
         />
         <Button variant="secondary" label={t('rooms.joinByCode')} onPress={joinByCode} disabled={code.trim() === ''} />
       </View>
-      {codeInvalid && <Text style={styles.error}>{t('rooms.codeInvalid')}</Text>}
+      {codeInvalid && <Text role="alert" style={styles.error}>{t('rooms.codeInvalid')}</Text>}
     </View>
   );
 }
