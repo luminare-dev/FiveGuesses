@@ -19,9 +19,14 @@ updates:
       prefix: ci
       include: scope
     labels: [dependencies]
+    open-pull-requests-limit: 5
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: npm
     directory: /
@@ -34,9 +39,14 @@ updates:
       prefix: build
       include: scope
     labels: [dependencies]
+    open-pull-requests-limit: 5
     groups:
       npm:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      npm-major:
+        patterns: ["*"]
+        update-types: ["major"]
     ignore:
       # Expo SDK packages move together ("npx expo install --fix"); majors are bumped by hand.
       - dependency-name: "expo"
