@@ -48,31 +48,30 @@ updates:
         patterns: ["*"]
         update-types: ["major"]
     ignore:
-      # Expo SDK packages move together ("npx expo install --fix"); majors are bumped by hand.
+      # Expo pins these (node_modules/expo/bundledNativeModules.json); they move together with the
+      # SDK via "npx expo install --fix", not through Dependabot. Minor or even patch bumps outside
+      # the SDK's range make "expo install --check" and npm ci fail.
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "expo-*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@expo/*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "jest-expo"
-        update-types: ["version-update:semver-major"]
-      # The SDK pins these to one minor version (node_modules/expo/bundledNativeModules.json);
-      # @types/react follows react.
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-native"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: "react-native-web"
+      - dependency-name: "react-native-*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native-async-storage/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Exact pins in the SDK: any version change, patch included, breaks the check.
       - dependency-name: "react"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@types/react"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: "@react-native-async-storage/async-storage"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      # Majors that need a change of their own, made by hand: Jest 30 (jest-expo 57 runs on
-      # Jest 29), TypeScript 7, and Node types past the Node 22 runtime (.nvmrc).
+      - dependency-name: "react-test-renderer"
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
       - dependency-name: "jest"
